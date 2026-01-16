@@ -21,4 +21,14 @@ dist-ssr
 *.ntvs*
 *.njsproj
 *.sln
-*.sw?
+# Build
+target/
+*.log
+backend-error.log
+bin/
+out/
+.gradle/
+.settings/
+.classpath
+.project
+

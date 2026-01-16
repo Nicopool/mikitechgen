@@ -1,21 +1,24 @@
-
 export type UserRole = 'ADMIN' | 'VENDOR' | 'USER';
+export type OrderStatus = 'PENDING' | 'ACCEPTED' | 'SHIPPED' | 'DELIVERED' | 'COMPLETED' | 'CANCELLED';
 
-export interface User {
+export type AppUser = {
   id: string;
   name: string;
   email: string;
-  password?: string;
   role: UserRole;
-  status: 'ACTIVE' | 'SUSPENDED';
-  joinDate: string;
-}
+  status: 'ACTIVE' | 'SUSPENDED' | 'PENDING';
+  joinDate?: string;
+  createdAt?: string;
+  avatar?: string;
+};
 
 export interface Category {
   id: string;
   label: string;
   icon: string;
   color: string;
+  slug?: string;
+  order?: number;
 }
 
 export interface Product {
@@ -27,39 +30,78 @@ export interface Product {
   category: string;
   image: string;
   status: 'ACTIVE' | 'INACTIVE';
-  vendorId: string;
-  vendorName: string;
+  vendorId?: string;
+  vendorName?: string;
   description: string;
+  metadata?: any;
+  updatedAt?: string;
 }
 
 export interface Kit {
   id: string;
   name: string;
   description: string;
-  products: { productId: string; quantity: number }[];
+  products: { productId: string; quantity: number; name?: string; price?: number }[];
   price: number;
   originalPrice: number;
   image: string;
   status: 'ACTIVE' | 'INACTIVE';
-  vendorId: string;
+  vendorId?: string;
+  updatedAt?: string;
 }
 
 export interface Order {
   id: string;
   userId: string;
-  userName: string;
+  userName?: string;
+  totalAmount: number;
+  status: OrderStatus;
+  createdAt: string;
+  subOrders: SubOrder[];
+  paymentMethod?: string;
+  address?: string;
+}
+
+export interface SubOrder {
+  id: string;
+  vendorId: string;
+  vendorName: string;
+  status: OrderStatus;
+  trackingNumber?: string;
+  items: CartItem[];
+}
+
+export interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image: string;
+  category: string;
+  type: 'PRODUCT' | 'KIT';
+}
+
+export interface Invoice {
+  id: string;
+  orderId: string;
   date: string;
   total: number;
-  status: 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED';
-  items: any[];
-  // Fix: added subOrders to match mock data in constants.tsx
-  subOrders?: any[];
+  pdfUrl?: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  userId: string;
+  subject: string;
+  description: string;
+  status: 'OPEN' | 'CLOSED' | 'PENDING';
+  createdAt: string;
+  category: string;
 }
 
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
-  // Fix: added optional properties for AI media attachments and search grounding
   image?: string;
   video?: string;
   groundingLinks?: { title: string; uri: string }[];

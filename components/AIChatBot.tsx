@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { chatWithGemini } from '../geminiService';
 import { ChatMessage } from '../types';
@@ -10,7 +9,7 @@ export const AIChatBot: React.FC = () => {
   const [isThinking, setIsThinking] = useState(false);
   const [useSearch, setUseSearch] = useState(false);
   const [useThinkingMode, setUseThinkingMode] = useState(false);
-  const [mediaData, setMediaData] = useState<{type: 'image' | 'video', data: string} | null>(null);
+  const [mediaData, setMediaData] = useState<{ type: 'image' | 'video', data: string } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -36,13 +35,13 @@ export const AIChatBot: React.FC = () => {
   const handleSend = async () => {
     if (!input.trim() && !mediaData) return;
 
-    const userMsg: ChatMessage = { 
-      role: 'user', 
+    const userMsg: ChatMessage = {
+      role: 'user',
       text: input,
       image: mediaData?.type === 'image' ? mediaData.data : undefined,
       video: mediaData?.type === 'video' ? mediaData.data : undefined
     };
-    
+
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setMediaData(null);
@@ -63,57 +62,64 @@ export const AIChatBot: React.FC = () => {
       };
       setMessages(prev => [...prev, modelMsg]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', text: "Error: " + (error as any).message }]);
+      let errorMsg = "Lo siento, ha ocurrido un error en el terminal de IA.";
+      if ((error as any).message?.includes('API key')) errorMsg = "La clave de IA no es válida. Contacta al soporte de Mikitech.";
+      setMessages(prev => [...prev, { role: 'model', text: errorMsg }]);
     } finally {
       setIsThinking(false);
     }
   };
 
   return (
-    <div className="fixed bottom-6 right-6 z-[100]">
+    <div className="fixed bottom-10 right-10 z-[200]">
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="bg-primary text-white p-4 rounded-full shadow-2xl hover:scale-110 transition-all flex items-center justify-center group"
+          className="bg-black text-white w-20 h-20 rounded-[32px] shadow-2xl hover:scale-110 transition-all flex items-center justify-center group border-2 border-white/10"
         >
-          <span className="material-symbols-outlined text-2xl group-hover:rotate-12">smart_toy</span>
+          <span className="material-symbols-outlined text-4xl group-hover:rotate-12 transition-transform">smart_toy</span>
         </button>
       )}
 
       {isOpen && (
-        <div className="bg-white dark:bg-surface-dark w-[380px] h-[600px] rounded-2xl shadow-2xl flex flex-col border border-gray-200 dark:border-gray-800 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="bg-primary p-4 flex items-center justify-between text-white">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined">smart_toy</span>
-              <span className="font-bold">mikitech AI Assistant</span>
+        <div className="bg-white w-[420px] h-[650px] rounded-[48px] shadow-2xl flex flex-col border-2 border-black overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-500">
+          <div className="bg-black p-8 flex items-center justify-between text-white">
+            <div className="flex items-center gap-4">
+              <span className="material-symbols-outlined text-green-500 animate-pulse">terminal</span>
+              <div>
+                <h3 className="text-[10px] font-black uppercase tracking-[0.3em]">IA: Mikitech Assistant</h3>
+                <p className="text-[8px] font-black uppercase tracking-widest text-gray-500">Protocolo de Asistencia Gamer</p>
+              </div>
             </div>
-            <button onClick={() => setIsOpen(false)} className="hover:bg-white/20 p-1 rounded">
-              <span className="material-symbols-outlined">close</span>
+            <button onClick={() => setIsOpen(false)} className="w-10 h-10 hover:bg-white/20 rounded-full flex items-center justify-center transition-all">
+              <span className="material-symbols-outlined text-sm">close</span>
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar" ref={scrollRef}>
+          <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar" ref={scrollRef}>
             {messages.length === 0 && (
-              <div className="text-center mt-10 space-y-4">
-                <div className="size-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto">
-                  <span className="material-symbols-outlined text-gray-400 text-3xl">chat_bubble</span>
+              <div className="h-full flex flex-col items-center justify-center text-center space-y-6 opacity-30">
+                <div className="w-24 h-24 bg-gray-50 rounded-[40px] flex items-center justify-center">
+                  <span className="material-symbols-outlined text-gray-400 text-5xl">memory</span>
                 </div>
-                <p className="text-slate-500 text-sm">Ask about robotics, assembly, or troubleshoot your code.</p>
+                <div>
+                  <p className="text-xs font-black uppercase mb-2">Terminal Operacional</p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">Consulta sobre builds de PC, optimización de portátiles o configuración de streaming.</p>
+                </div>
               </div>
             )}
             {messages.map((m, i) => (
               <div key={i} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}>
-                {m.image && <img src={m.image} className="max-w-[200px] rounded-lg mb-1 border" />}
-                {m.video && <div className="p-2 bg-slate-100 rounded text-xs mb-1">Video Attachment Attached</div>}
-                <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm ${
-                  m.role === 'user' ? 'bg-primary text-white rounded-tr-none' : 'bg-gray-100 dark:bg-gray-800 text-slate-800 dark:text-slate-200 rounded-tl-none'
-                }`}>
+                {m.image && <img src={m.image} className="max-w-[250px] rounded-[32px] mb-4 border-2 border-gray-100 shadow-xl" alt="upload" />}
+                {m.video && <div className="p-4 bg-gray-50 rounded-[24px] text-[10px] font-black uppercase mb-4 tracking-widest border border-gray-100">Video Data Transferred 100%</div>}
+                <div className={`max-w-[90%] px-6 py-4 rounded-[28px] text-[11px] font-medium leading-relaxed shadow-sm ${m.role === 'user' ? 'bg-black text-white rounded-tr-none' : 'bg-gray-100 text-gray-900 rounded-tl-none border-2 border-gray-50'
+                  }`}>
                   {m.text}
                   {m.groundingLinks && m.groundingLinks.length > 0 && (
-                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-700 space-y-1">
-                      <p className="text-[10px] uppercase font-bold text-gray-500">Sources:</p>
+                    <div className="mt-4 pt-4 border-t border-black/10 space-y-3">
+                      <p className="text-[8px] uppercase font-black text-gray-400 tracking-widest">Fuentes de Referencia:</p>
                       {m.groundingLinks.map((link, li) => (
-                        <a key={li} href={link.uri} target="_blank" rel="noreferrer" className="block text-primary hover:underline text-xs truncate">
+                        <a key={li} href={link.uri} target="_blank" rel="noreferrer" className="block text-inherit hover:underline text-[9px] truncate opacity-50 font-bold tracking-tight">
                           • {link.title}
                         </a>
                       ))}
@@ -123,57 +129,61 @@ export const AIChatBot: React.FC = () => {
               </div>
             ))}
             {isThinking && (
-              <div className="flex gap-2 items-center text-slate-400 text-xs italic">
-                <span className="material-symbols-outlined animate-spin text-sm">cycle</span>
-                {useThinkingMode ? 'AI is deeply analyzing...' : 'AI is thinking...'}
+              <div className="flex gap-3 items-center text-gray-400 text-[10px] font-black uppercase tracking-widest">
+                <div className="flex gap-1">
+                  <div className="w-1.5 h-1.5 bg-black rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <div className="w-1.5 h-1.5 bg-black rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <div className="w-1.5 h-1.5 bg-black rounded-full animate-bounce" />
+                </div>
+                {useThinkingMode ? 'Analizando Protocolos...' : 'Procesando Consulta...'}
               </div>
             )}
           </div>
 
-          <div className="p-4 bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800">
-            <div className="flex gap-4 mb-2">
-              <button 
+          <div className="p-8 bg-gray-50/50 border-t-2 border-gray-100">
+            <div className="flex gap-3 mb-6">
+              <button
                 onClick={() => setUseThinkingMode(!useThinkingMode)}
-                className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${useThinkingMode ? 'bg-purple-100 border-purple-300 text-purple-700' : 'bg-white border-gray-300 text-gray-500'}`}
+                className={`flex items-center gap-2 text-[9px] font-black uppercase px-4 py-2 rounded-full border-2 transition-all tracking-widest ${useThinkingMode ? 'bg-black border-black text-white' : 'bg-white border-gray-100 text-gray-400 hover:border-gray-300'}`}
               >
-                <span className="material-symbols-outlined text-xs">psychology</span> Deep Think
+                <span className="material-symbols-outlined text-sm">psychology</span> Análisis Profundo
               </button>
-              <button 
+              <button
                 onClick={() => setUseSearch(!useSearch)}
-                className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border transition-colors ${useSearch ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-gray-300 text-gray-500'}`}
+                className={`flex items-center gap-2 text-[9px] font-black uppercase px-4 py-2 rounded-full border-2 transition-all tracking-widest ${useSearch ? 'bg-black border-black text-white' : 'bg-white border-gray-100 text-gray-400 hover:border-gray-300'}`}
               >
-                <span className="material-symbols-outlined text-xs">search</span> Search Grounding
+                <span className="material-symbols-outlined text-sm">search</span> Referencias Web
               </button>
             </div>
 
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-4">
               <div className="flex-1 relative">
                 {mediaData && (
-                  <div className="absolute -top-12 left-0 right-0 p-2 bg-white dark:bg-gray-800 shadow rounded border flex items-center justify-between">
-                    <span className="text-xs truncate">{mediaData.type === 'image' ? 'Image selected' : 'Video selected'}</span>
-                    <button onClick={() => setMediaData(null)}><span className="material-symbols-outlined text-xs">close</span></button>
+                  <div className="absolute -top-16 left-0 right-0 p-4 bg-white border-2 border-black rounded-[32px] flex items-center justify-between shadow-2xl shadow-black/10 animate-in slide-in-from-bottom-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest">{mediaData.type === 'image' ? 'Imagen Lista' : 'Video Listo'}</span>
+                    <button onClick={() => setMediaData(null)}><span className="material-symbols-outlined text-sm">close</span></button>
                   </div>
                 )}
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-                  placeholder="Ask a question..."
-                  className="w-full bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg text-sm p-2 pr-10 focus:ring-primary min-h-[44px] max-h-[120px] resize-none"
+                  placeholder="Ingresar comando..."
+                  className="w-full bg-white border-2 border-gray-100 rounded-[32px] text-xs p-5 pr-12 focus:border-black outline-none transition-all min-h-[60px] max-h-[180px] resize-none font-bold"
                 />
-                <div className="absolute right-2 bottom-2 flex gap-1">
-                  <label className="cursor-pointer text-gray-400 hover:text-primary transition-colors">
-                    <span className="material-symbols-outlined text-xl">attach_file</span>
+                <div className="absolute right-4 bottom-5 flex gap-2">
+                  <label className="cursor-pointer text-gray-300 hover:text-black transition-all">
+                    <span className="material-symbols-outlined text-xl">add_circle</span>
                     <input type="file" className="hidden" accept="image/*,video/*" onChange={handleMediaUpload} />
                   </label>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={handleSend}
                 disabled={isThinking}
-                className="bg-primary text-white p-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                className="bg-black text-white h-14 w-14 rounded-[28px] hover:scale-105 disabled:opacity-50 transition-all flex items-center justify-center shrink-0 shadow-2xl shadow-black/20"
               >
-                <span className="material-symbols-outlined">send</span>
+                <span className="material-symbols-outlined text-xl">send</span>
               </button>
             </div>
           </div>

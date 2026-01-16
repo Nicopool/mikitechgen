@@ -1,85 +1,366 @@
 
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { ImageGenerator } from '../components/ImageGenerator';
-import { VideoGenerator } from '../components/VideoGenerator';
-import { Order } from '../types';
+import React, { useState } from 'react';
+import { Routes, Route, Link } from 'react-router-dom';
+import { DashboardLayout } from '../components/DashboardLayout';
+import { Order, AppUser, Invoice, SupportTicket } from '../types';
+import {
+  Line,
+  Doughnut,
+  Bar
+} from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement,
+} from 'chart.js';
+import {
+  Search,
+  Filter,
+  Eye,
+  Download,
+  ExternalLink,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  TrendingUp,
+  CreditCard,
+  ShoppingBag,
+  ArrowRight
+} from 'lucide-react';
 
-// Interface for Dashboard props received from App.tsx
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
 interface DashboardProps {
-  user: any;
+  user: User;
   orders: Order[];
 }
 
-export const DashboardPage: React.FC<DashboardProps> = ({ user, orders }) => {
+// Sub-components for User Dashboard
+const UserHome = ({ user, orders }: { user: AppUser, orders: Order[] }) => {
+  const totalSpent = orders.reduce((acc, o) => acc + o.totalAmount, 0);
+  const activeOrders = orders.filter(o => o.status === 'PENDING' || o.status === 'ACCEPTED').length;
+
+  const chartData = {
+    labels: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'],
+    datasets: [
+      {
+        label: 'Gasto Mensual ($)',
+        data: [120, 190, 300, 250, 480, 450],
+        borderColor: 'black',
+        backgroundColor: 'rgba(0, 0, 0, 0.05)',
+        fill: true,
+        tension: 0.4,
+      },
+    ],
+  };
+
+  const statusData = {
+    labels: ['Completados', 'Pendientes', 'Cancelados'],
+    datasets: [
+      {
+        data: [
+          orders.filter(o => o.status === 'COMPLETED').length,
+          orders.filter(o => o.status === 'PENDING').length,
+          orders.filter(o => o.status === 'CANCELLED').length,
+        ],
+        backgroundColor: ['#000000', '#f3f4f6', '#e5e7eb'],
+        borderWidth: 0,
+      },
+    ],
+  };
+
   return (
-    <div className="flex min-h-screen w-full flex-row overflow-hidden bg-background-light dark:bg-background-dark text-[#111318] dark:text-white">
-      <aside className="hidden lg:flex w-64 flex-col border-r border-[#e5e7eb] dark:border-[#2b303b] bg-white dark:bg-[#111621] fixed h-full z-10">
-        <div className="flex h-16 items-center px-6 border-b border-[#e5e7eb] dark:border-[#2b303b]">
-          <Link to="/" className="flex items-center gap-2 text-primary">
-            <span className="material-symbols-outlined !text-[28px] font-bold">memory</span>
-            <span className="text-xl font-bold tracking-tight text-[#111318] dark:text-white">mikitech</span>
+    <div className="space-y-12 animate-in fade-in duration-700">
+      {/* KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        {[
+          { label: 'Pedidos Activos', value: activeOrders.toString(), icon: <ShoppingBag size={20} />, trend: 'Actualizado' },
+          { label: 'Total Gastado', value: `$${totalSpent.toFixed(2)}`, icon: <CreditCard size={20} />, trend: '+12% este mes' },
+          { label: 'Última Compra', value: orders[0]?.createdAt ? new Date(orders[0].createdAt).toLocaleDateString() : 'N/A', icon: <Clock size={20} />, trend: orders[0]?.status || '' },
+          { label: 'Ahorro por Kits', value: '$45.00', icon: <TrendingUp size={20} />, trend: 'En 3 compras' },
+        ].map((kpi, i) => (
+          <div key={i} className="p-8 border-2 border-gray-100 rounded-[32px] bg-white hover:border-black transition-all group">
+            <div className="flex items-center justify-between mb-6">
+              <div className="p-3 bg-gray-50 rounded-xl group-hover:bg-black group-hover:text-white transition-all">
+                {kpi.icon}
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest text-green-500">{kpi.trend}</span>
+            </div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">{kpi.label}</p>
+            <p className="text-3xl font-black">{kpi.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Main Chart */}
+        <div className="lg:col-span-2 p-10 border-2 border-gray-100 rounded-[40px] bg-white">
+          <div className="flex items-center justify-between mb-10">
+            <h3 className="text-xl font-black uppercase tracking-tight">Historial de Gastos</h3>
+            <select className="bg-gray-50 border-none text-[10px] font-black uppercase rounded-full px-4 py-2 outline-none cursor-pointer">
+              <option>Últimos 6 meses</option>
+              <option>Último año</option>
+            </select>
+          </div>
+          <div className="h-[300px]">
+            <Line
+              data={chartData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                  y: { grid: { display: false }, ticks: { font: { weight: 'bold' } } },
+                  x: { grid: { display: false }, ticks: { font: { weight: 'bold' } } }
+                }
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Doughnut Chart */}
+        <div className="p-10 border-2 border-gray-100 rounded-[40px] bg-white">
+          <h3 className="text-xl font-black uppercase tracking-tight mb-10">Estado de Pedidos</h3>
+          <div className="h-[200px] flex items-center justify-center relative">
+            <Doughnut
+              data={statusData}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { font: { weight: 'bold', size: 10 }, boxWidth: 10 } } },
+                cutout: '70%'
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Recent Orders Short List */}
+      <div className="p-10 border-2 border-gray-100 rounded-[40px] bg-white">
+        <div className="flex items-center justify-between mb-10">
+          <h3 className="text-xl font-black uppercase tracking-tight">Pedidos en curso</h3>
+          <Link to="/dashboard/orders" className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black transition-all flex items-center gap-2">
+            Ver todos <ArrowRight size={14} />
           </Link>
         </div>
-        <div className="flex flex-col flex-1 gap-1 px-3 py-4 overflow-y-auto">
-          <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary dark:text-blue-400 font-medium"><span className="material-symbols-outlined !text-[22px] filled">dashboard</span>Dashboard</a>
-          <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#636f88] dark:text-[#9ca3af] hover:bg-[#f0f2f4] dark:hover:bg-[#1f2937]"><span className="material-symbols-outlined !text-[22px]">package_2</span>Orders</a>
-          <a href="#" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#636f88] dark:text-[#9ca3af] hover:bg-[#f0f2f4] dark:hover:bg-[#1f2937]"><span className="material-symbols-outlined !text-[22px]">auto_awesome</span>AI Labs</a>
-        </div>
-        <div className="p-3 mt-auto">
-          <Link to="/" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-[#636f88] dark:text-[#9ca3af] hover:bg-[#f0f2f4] dark:hover:bg-[#1f2937]"><span className="material-symbols-outlined !text-[22px]">logout</span>Log Out</Link>
-        </div>
-      </aside>
-
-      <main className="flex-1 flex flex-col min-w-0 lg:ml-64 transition-all duration-300">
-        <div className="flex-1 p-6 lg:p-10 space-y-8 max-w-6xl mx-auto w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-[#111318] dark:text-white">Welcome back, {user?.name || 'User'}</h1>
-              <p className="text-slate-500 text-sm">Monitor your projects and generate new hardware concepts.</p>
-            </div>
-            <button className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 transition-colors">New Project</button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div className="lg:col-span-12">
-               <div className="rounded-xl border border-[#e5e7eb] dark:border-[#2b303b] bg-white dark:bg-[#1e232e] shadow-sm flex flex-col overflow-hidden mb-8">
-                <div className="p-6 border-b border-[#e5e7eb] dark:border-[#2b303b] flex items-center justify-between">
-                  <h3 className="text-base font-semibold text-[#111318] dark:text-white">Active Orders</h3>
+        <div className="space-y-4">
+          {orders.slice(0, 3).map(order => (
+            <div key={order.id} className="flex items-center justify-between p-6 border-2 border-gray-50 rounded-3xl hover:border-black transition-all">
+              <div className="flex items-center gap-6">
+                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center">
+                  <Clock size={20} className="text-gray-400" />
                 </div>
-                <div className="p-0 overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead><tr className="text-xs font-semibold text-[#636f88] dark:text-[#9ca3af] border-b border-[#e5e7eb] dark:border-[#2b303b]"><th className="px-6 py-3">Order ID</th><th className="px-6 py-3">Product</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Action</th></tr></thead>
-                    <tbody className="text-sm divide-y divide-[#e5e7eb] dark:divide-[#2b303b]">
-                      {orders.map(order => (
-                        <tr key={order.id}>
-                          <td className="px-6 py-4 font-medium text-[#111318] dark:text-white">{order.id}</td>
-                          <td className="px-6 py-4">{order.subOrders[0]?.items[0]?.name || 'Kit Component'}</td>
-                          <td className="px-6 py-4"><span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 dark:bg-green-900/30 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400">{order.status}</span></td>
-                          <td className="px-6 py-4 text-right"><Link to="/tracking" className="text-primary font-semibold text-xs">Track</Link></td>
-                        </tr>
-                      ))}
-                      {orders.length === 0 && (
-                        <tr>
-                          <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">No active orders found.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                <div>
+                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Orden #{order.id.slice(0, 8)}</p>
+                  <p className="font-black uppercase text-sm">{order.subOrders[0]?.items[0]?.name || 'Kit Digital'}</p>
                 </div>
               </div>
+              <div className="flex items-center gap-12">
+                <div className="text-right">
+                  <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Estado</p>
+                  <span className="px-3 py-1 bg-black text-white text-[8px] font-black uppercase rounded-full">{order.status}</span>
+                </div>
+                <button className="p-3 bg-gray-50 rounded-xl hover:bg-black hover:text-white transition-all">
+                  <Eye size={16} />
+                </button>
+              </div>
             </div>
+          ))}
+          {orders.length === 0 && <p className="text-center py-10 text-gray-400 font-bold uppercase text-[10px]">No hay pedidos activos.</p>}
+        </div>
+      </div>
+    </div>
+  );
+};
 
-            <div className="lg:col-span-6">
-              <ImageGenerator />
-            </div>
-            
-            <div className="lg:col-span-6">
-              <VideoGenerator />
+const MisPedidos = ({ orders }: { orders: Order[] }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+          <h2 className="text-4xl font-black uppercase tracking-tighter mb-2">Mis <span className="text-gray-300">Pedidos</span></h2>
+          <p className="text-gray-500 font-medium">Gestionar historial y seguimiento de compras.</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+            <input
+              type="text"
+              placeholder="Buscar #orden..."
+              className="pl-12 pr-6 py-4 border-2 border-gray-100 rounded-2xl bg-white outline-none focus:border-black transition-all text-sm font-bold w-64"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <button className="p-4 border-2 border-gray-100 rounded-2xl bg-white hover:border-black transition-all">
+            <Filter size={20} />
+          </button>
+        </div>
+      </div>
+
+      <div className="border-2 border-gray-100 rounded-[40px] overflow-hidden bg-white shadow-xl shadow-black/0">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 border-b-2 border-gray-100">
+              <th className="px-10 py-8"># Orden</th>
+              <th className="px-10 py-8">Fecha</th>
+              <th className="px-10 py-8">Total</th>
+              <th className="px-10 py-8">Vendores</th>
+              <th className="px-10 py-8">Estado</th>
+              <th className="px-10 py-8 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {orders.map(o => (
+              <tr key={o.id} className="hover:bg-gray-50/50 transition-colors group">
+                <td className="px-10 py-8 font-black uppercase tracking-tighter text-sm">#{o.id.slice(0, 8)}</td>
+                <td className="px-10 py-8 text-[11px] font-bold text-gray-500 uppercase">{new Date(o.createdAt).toLocaleDateString()}</td>
+                <td className="px-10 py-8 font-black text-lg">${o.totalAmount.toFixed(2)}</td>
+                <td className="px-10 py-8 text-[10px] font-black uppercase text-gray-400">{o.subOrders.length} Proveedores</td>
+                <td className="px-10 py-8">
+                  <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${o.status === 'COMPLETED' ? 'bg-green-50 text-green-600' :
+                    o.status === 'CANCELLED' ? 'bg-red-50 text-red-600' :
+                      'bg-black text-white'
+                    }`}>
+                    {o.status}
+                  </span>
+                </td>
+                <td className="px-10 py-8 text-right">
+                  <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                    <button className="p-3 bg-gray-100 rounded-xl hover:bg-black hover:text-white transition-all" title="Ver Detalle"><Eye size={16} /></button>
+                    <button className="p-3 bg-gray-100 rounded-xl hover:bg-black hover:text-white transition-all" title="Descargar Factura"><Download size={16} /></button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {orders.length === 0 && <div className="py-20 text-center text-gray-400 font-black uppercase text-xs tracking-widest">No tienes órdenes todavía.</div>}
+      </div>
+    </div>
+  );
+};
+
+const Facturas = () => (
+  <div className="animate-in fade-in duration-700">
+    <h2 className="text-4xl font-black uppercase tracking-tighter mb-10">Mis <span className="text-gray-300">Facturas</span></h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {[1, 2, 3].map(i => (
+        <div key={i} className="p-8 border-2 border-gray-100 rounded-[32px] bg-white group hover:border-black transition-all flex flex-col items-center text-center">
+          <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-6 group-hover:bg-black transition-all">
+            <FileText size={24} className="text-gray-300 group-hover:text-white" />
+          </div>
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Factura #INV-10{i}</p>
+          <p className="font-black uppercase mb-4 tracking-tight">Compra Digital Kit {i}</p>
+          <p className="text-sm font-bold text-gray-500 mb-8 uppercase">Fecha: 1{i}/05/2024</p>
+          <button className="w-full py-4 bg-gray-50 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-black hover:text-white transition-all flex items-center justify-center gap-3">
+            <Download size={14} /> Descargar PDF
+          </button>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const UserProfile = ({ user }: { user: User }) => (
+  <div className="max-w-3xl animate-in fade-in duration-700">
+    <h2 className="text-4xl font-black uppercase tracking-tighter mb-10">Mi <span className="text-gray-300">Perfil</span></h2>
+    <div className="p-12 border-2 border-gray-100 rounded-[40px] bg-white space-y-10">
+      <div className="flex items-center gap-10 border-b border-gray-100 pb-10">
+        <div className="w-24 h-24 bg-black rounded-[32px] flex items-center justify-center text-white relative group">
+          <User size={40} />
+          <button className="absolute inset-0 bg-black/60 rounded-[32px] opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center">
+            <span className="material-symbols-outlined text-white">photo_camera</span>
+          </button>
+        </div>
+        <div>
+          <h3 className="text-2xl font-black uppercase tracking-tight mb-2">{user.name}</h3>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">{user.role} | ACTIVO</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-10">
+        <div className="space-y-3">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Email</label>
+          <input disabled className="w-full p-5 border-2 border-gray-50 rounded-2xl font-bold bg-gray-50/50" value={user.email} />
+        </div>
+        <div className="space-y-3">
+          <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Nombre Completo</label>
+          <input className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all" value={user.name} />
+        </div>
+      </div>
+
+      <div className="pt-6">
+        <button className="px-10 py-5 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-black/20">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+);
+
+export const DashboardPage: React.FC<{ user: AppUser, orders: Order[] }> = ({ user, orders }) => {
+  return (
+    <DashboardLayout role="USER">
+      <Routes>
+        <Route index element={<UserHome user={user} orders={orders} />} />
+        <Route path="orders" element={<MisPedidos orders={orders} />} />
+        <Route path="invoices" element={<Facturas />} />
+        <Route path="profile" element={<UserProfile user={user} />} />
+        <Route path="support" element={
+          <div className="animate-in fade-in duration-700">
+            <h2 className="text-4xl font-black uppercase tracking-tighter mb-4">Centro de <span className="text-gray-300">Soporte</span></h2>
+            <p className="text-gray-500 mb-12">Estamos aquí para optimizar tu experiencia.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+              <div className="p-12 border-2 border-gray-100 rounded-[40px] bg-white">
+                <h3 className="text-xl font-black uppercase tracking-tight mb-8">Crear Ticket</h3>
+                <div className="space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Asunto</label>
+                    <input className="w-full p-5 border-2 border-gray-100 rounded-2xl focus:border-black outline-none transition-all font-bold" />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Descripción</label>
+                    <textarea className="w-full p-5 border-2 border-gray-100 rounded-2xl focus:border-black outline-none transition-all font-bold h-40 resize-none" />
+                  </div>
+                  <button className="w-full py-5 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl">Enviar Reporte</button>
+                </div>
+              </div>
+              <div className="space-y-6">
+                <h3 className="text-xl font-black uppercase tracking-tight mb-8">Preguntas Frecuentes</h3>
+                {[
+                  '¿Cómo descargar mis kits digitales?',
+                  '¿Es el pago seguro a través de Mikitech?',
+                  '¿Puedo solicitar una devolución?',
+                  '¿Qué incluye el bundle supremo?'
+                ].map((q, i) => (
+                  <div key={i} className="p-6 border-2 border-gray-100 rounded-3xl hover:border-black transition-all cursor-pointer flex items-center justify-between group">
+                    <span className="font-bold text-sm uppercase tracking-tight">{q}</span>
+                    <span className="material-symbols-outlined text-gray-300 group-hover:text-black">arrow_forward</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </main>
-    </div>
+        } />
+      </Routes>
+    </DashboardLayout>
   );
 };

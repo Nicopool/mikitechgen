@@ -8,7 +8,7 @@ import { AISize } from "./types";
 export const chatWithGemini = async (prompt: string, history: any[], options: any = {}) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const modelName = options.useSearch ? 'gemini-3-pro-preview' : 'gemini-3-flash-preview';
-  
+
   // Format history for the SDK
   const contents: any[] = history.map(msg => ({
     role: msg.role === 'user' ? 'user' : 'model',
@@ -36,7 +36,7 @@ export const chatWithGemini = async (prompt: string, history: any[], options: an
   });
 
   const config: any = {
-    systemInstruction: "You are the Mikitech AI Support Assistant. Help users with technical assembly of kits, troubleshooting components, and identifying parts. Be professional and high-tech.",
+    systemInstruction: "Eres el Asistente Experto de MIKITECH. Tu objetivo es ayudar a los usuarios con la elección, configuración y optimización de kits digitales para Gaming PC, Portátiles, Streaming y Sets Gaming. Responde siempre en español, con un tono profesional, técnico y futurista. Ayuda a resolver dudas sobre compatibilidad de hardware y configuraciones de software para gaming.",
   };
 
   // Enable Google Search grounding if requested
