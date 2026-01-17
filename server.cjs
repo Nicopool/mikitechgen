@@ -119,6 +119,45 @@ app.get('/api/users/:id', async (req, res) => {
     }
 });
 
+// Update user
+app.put('/api/users/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, email, phone } = req.body;
+
+        const updates = [];
+        const values = [];
+
+        if (name) {
+            // Split name into first_name and last_name
+            const nameParts = name.trim().split(' ');
+            const firstName = nameParts[0] || '';
+            const lastName = nameParts.slice(1).join(' ') || '';
+
+            updates.push('first_name = ?', 'last_name = ?');
+            values.push(firstName, lastName);
+        }
+
+        if (email) { updates.push('email = ?'); values.push(email); }
+        if (phone) { updates.push('phone = ?'); values.push(phone); }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        values.push(id);
+        await pool.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
+            values
+        );
+
+        res.json({ message: 'User updated successfully' });
+    } catch (error) {
+        console.error('Error updating user:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============= PRODUCTS ENDPOINTS =============
 
 // Get all products
@@ -166,6 +205,107 @@ app.get('/api/products', async (req, res) => {
     }
 });
 
+// Create product
+app.post('/api/products', async (req, res) => {
+    try {
+        const { name, sku, price, stock, category, description, image, status, vendorId } = req.body;
+
+        // Validation
+        if (!name || !sku || !vendorId) {
+            return res.status(400).json({ error: 'Name, SKU, and vendorId are required' });
+        }
+
+        // Generate slug from name
+        const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+        // Convert status to boolean (ACTIVE = 1, INACTIVE = 0)
+        const active = status === 'ACTIVE' ? 1 : 0;
+
+        // Insert product
+        const [result] = await pool.query(
+            'INSERT INTO products (name, slug, sku, price, stock, description, image_url, active, provider_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [name, slug, sku, price || 0, stock || 0, description || '', image || '', active, vendorId]
+        );
+
+        const productId = result.insertId;
+
+        // Associate with category if provided
+        if (category) {
+            // Find or create category
+            const [categoryRows] = await pool.query('SELECT id FROM categories WHERE name = ?', [category]);
+            let categoryId;
+
+            if (categoryRows.length > 0) {
+                categoryId = categoryRows[0].id;
+            } else {
+                // Create new category
+                const categorySlug = category.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+                const [catResult] = await pool.query(
+                    'INSERT INTO categories (name, slug, active) VALUES (?, ?, 1)',
+                    [category, categorySlug]
+                );
+                categoryId = catResult.insertId;
+            }
+
+            // Link product to category
+            await pool.query(
+                'INSERT INTO product_categories (product_id, category_id) VALUES (?, ?)',
+                [productId, categoryId]
+            );
+        }
+
+        res.status(201).json({
+            id: productId.toString(),
+            message: 'Product created successfully'
+        });
+    } catch (error) {
+        console.error('Error creating product:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update product
+app.put('/api/products/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, sku, price, stock, category, description, image, status } = req.body;
+
+        // Generate slug if name is updated
+        const slug = name ? name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') : undefined;
+
+        // Convert status to boolean
+        const active = status === 'ACTIVE' ? 1 : 0;
+
+        // Build update query dynamically
+        const updates = [];
+        const values = [];
+
+        if (name) { updates.push('name = ?'); values.push(name); }
+        if (slug) { updates.push('slug = ?'); values.push(slug); }
+        if (sku) { updates.push('sku = ?'); values.push(sku); }
+        if (price !== undefined) { updates.push('price = ?'); values.push(price); }
+        if (stock !== undefined) { updates.push('stock = ?'); values.push(stock); }
+        if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+        if (image !== undefined) { updates.push('image_url = ?'); values.push(image); }
+        if (status) { updates.push('active = ?'); values.push(active); }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        values.push(id);
+        await pool.query(
+            `UPDATE products SET ${updates.join(', ')} WHERE id = ?`,
+            values
+        );
+
+        res.json({ message: 'Product updated successfully' });
+    } catch (error) {
+        console.error('Error updating product:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============= KITS ENDPOINTS =============
 
 // Get all kits
@@ -203,6 +343,66 @@ app.get('/api/kits', async (req, res) => {
         res.json(kits);
     } catch (error) {
         console.error('Error fetching kits:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Create kit
+app.post('/api/kits', async (req, res) => {
+    try {
+        const { name, description, products, price, originalPrice, image, status, vendorId } = req.body;
+
+        // Validation
+        if (!name || !vendorId || !products || products.length === 0) {
+            return res.status(400).json({ error: 'Name, vendorId, and products are required' });
+        }
+
+        // Generate slug
+        const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+        // Convert status to string (default 'ACTIVE')
+        const kitStatus = status || 'ACTIVE';
+
+        // Insert kit
+        const [result] = await pool.query(
+            'INSERT INTO kits (name, slug, description, price, image_url, status, provider_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [name, slug, description || '', price || 0, image || '', kitStatus, vendorId]
+        );
+
+        const kitId = result.insertId;
+
+        // Insert kit items
+        for (const product of products) {
+            await pool.query(
+                'INSERT INTO kit_items (kit_id, product_id, quantity) VALUES (?, ?, ?)',
+                [kitId, product.productId, product.quantity || 1]
+            );
+        }
+
+        res.status(201).json({
+            id: kitId.toString(),
+            message: 'Kit created successfully'
+        });
+    } catch (error) {
+        console.error('Error creating kit:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete kit
+app.delete('/api/kits/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // First delete kit items
+        await pool.query('DELETE FROM kit_items WHERE kit_id = ?', [id]);
+
+        // Then delete the kit
+        await pool.query('DELETE FROM kits WHERE id = ?', [id]);
+
+        res.json({ message: 'Kit deleted successfully' });
+    } catch (error) {
+        console.error('Error deleting kit:', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -254,6 +454,25 @@ app.get('/api/orders', async (req, res) => {
         res.json(orders);
     } catch (error) {
         console.error('Error fetching orders:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update order status
+app.put('/api/orders/:id/status', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!status) {
+            return res.status(400).json({ error: 'Status is required' });
+        }
+
+        await pool.query('UPDATE orders SET status = ? WHERE id = ?', [status, id]);
+
+        res.json({ message: 'Order status updated successfully' });
+    } catch (error) {
+        console.error('Error updating order status:', error);
         res.status(500).json({ error: error.message });
     }
 });

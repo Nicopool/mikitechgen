@@ -48,6 +48,7 @@ import {
   XCircle
 } from 'lucide-react';
 import { generatePDFReport } from '../lib/pdfGenerator';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 ChartJS.register(
   CategoryScale,
@@ -152,61 +153,6 @@ const OrderDetailsModal = ({ order, onClose }: { order: Order | null, onClose: (
   );
 };
 
-// Modal de confirmación
-const ConfirmModal = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  title,
-  message,
-  confirmText = "Confirmar",
-  type = "danger"
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  title: string;
-  message: string;
-  confirmText?: string;
-  type?: "danger" | "success";
-}) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-8" onClick={onClose}>
-      <div className="bg-white rounded-[32px] max-w-md w-full p-10" onClick={(e) => e.stopPropagation()}>
-        <div className="text-center">
-          <div className={`w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center ${type === "danger" ? "bg-red-50" : "bg-green-50"
-            }`}>
-            {type === "danger" ? <AlertCircle size={32} className="text-red-500" /> : <CheckCircle2 size={32} className="text-green-500" />}
-          </div>
-          <h3 className="text-2xl font-black uppercase tracking-tight mb-4">{title}</h3>
-          <p className="text-gray-600 font-bold mb-8">{message}</p>
-          <div className="flex gap-4">
-            <button
-              onClick={onClose}
-              className="flex-1 px-6 py-4 bg-gray-100 text-black font-black uppercase text-xs rounded-2xl hover:bg-gray-200 transition-all"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={() => {
-                onConfirm();
-                onClose();
-              }}
-              className={`flex-1 px-6 py-4 font-black uppercase text-xs rounded-2xl transition-all ${type === "danger"
-                ? "bg-red-500 text-white hover:bg-red-600"
-                : "bg-green-500 text-white hover:bg-green-600"
-                }`}
-            >
-              {confirmText}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
 
 const AdminHome = ({ users, products, orders, navigate }: { users: AppUser[], products: Product[], orders: Order[], navigate: any }) => {
   const totalSales = orders.reduce((acc, o) => acc + o.totalAmount, 0);
@@ -460,6 +406,8 @@ export const AdminPage: React.FC<AdminProps> = ({ categories, users, products })
   const { orders, refreshData } = useData();
   const [newCat, setNewCat] = useState({ label: '', icon: 'grid_view' });
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [isMaintenance, setIsMaintenance] = useState(false);
+  const [config, setConfig] = useState({ tax: '16', threshold: '5' });
 
   // Estados para filtros de proveedores
   const [vendorSearch, setVendorSearch] = useState('');
@@ -1014,23 +962,39 @@ export const AdminPage: React.FC<AdminProps> = ({ categories, users, products })
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-3">
                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Impuesto Aplicado (%)</label>
-                  <input className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all" defaultValue="16" />
+                  <input
+                    className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                    value={config.tax}
+                    onChange={(e) => setConfig({ ...config, tax: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-3">
                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Umbral Stock Bajo (Uds)</label>
-                  <input className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all" defaultValue="5" />
+                  <input
+                    className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                    value={config.threshold}
+                    onChange={(e) => setConfig({ ...config, threshold: e.target.value })}
+                  />
                 </div>
               </div>
               <div className="flex items-center justify-between p-8 bg-black rounded-[32px] text-white">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2">Mantenimiento de Red</p>
-                  <p className="font-bold">Activar modo offline para mantenimiento global.</p>
+                  <p className="font-bold">{isMaintenance ? 'SISTEMA EN MANTENIMIENTO' : 'Sistema Operativo'}</p>
                 </div>
-                <div className="w-14 h-8 bg-gray-800 rounded-full p-1 cursor-pointer">
-                  <div className="w-6 h-6 bg-gray-600 rounded-full transition-all" />
+                <div
+                  onClick={() => setIsMaintenance(!isMaintenance)}
+                  className={`w-14 h-8 rounded-full p-1 cursor-pointer transition-all ${isMaintenance ? 'bg-red-500' : 'bg-gray-800'}`}
+                >
+                  <div className={`w-6 h-6 bg-white rounded-full transition-all transform ${isMaintenance ? 'translate-x-6' : 'translate-x-0'}`} />
                 </div>
               </div>
-              <button className="px-12 py-6 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-black/20">Desplegar Cambios Nucleares</button>
+              <button
+                onClick={() => alert(`Cambios nucleares desplegados: Tax ${config.tax}%, Stock Threshold ${config.threshold}`)}
+                className="px-12 py-6 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-black/20"
+              >
+                Desplegar Cambios Nucleares
+              </button>
             </div>
           </div>
         } />

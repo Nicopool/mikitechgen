@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { DataProvider, useData } from './contexts/DataContext';
+import { DataProvider, useData } from './contexts/DataContextSupabase';
 import { CartProvider } from './contexts/CartContext';
 
 // Screens

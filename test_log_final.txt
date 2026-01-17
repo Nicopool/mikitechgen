@@ -1,0 +1,19 @@
+﻿[dotenv@17.2.3] injecting env (10) from .env.local -- tip: ­ƒöÉ prevent committing .env to code: https://dotenvx.com/precommit
+--- DIAGN├ôSTICO DE CONEXI├ôN ---
+URL: https://gveitgpbsltdytmyeupg.supabase.co
+KEY (Service): sb_secret_MBkdT...
+
+ÔÜá´©Å  ADVERTENCIA DE FORMATO:
+   La llave actual empieza con "sb_se..."
+   Las llaves est├índar de Supabase (JWT) usualmente empiezan con "ey..."
+   Sin embargo, probaremos si funciona...
+
+1´©ÅÔâú  PRUEBA DE LECTURA (READ)...
+   Ô£à LECTURA EXITOSA: La conexi├│n funciona y puede leer.
+
+2´©ÅÔâú  PRUEBA DE ESCRITURA (WRITE)...
+   Intentando crear un registro de prueba en "audit_logs"...
+
+­ƒö┤ DIAGN├ôSTICO FINAL:
+   Tu llave conecta, pero NO TIENE PERMISOS DE ESCRITURA o la tabla no existe.
+   Si la tabla existe, entonces est├ís usando la llave Incorrecta (Anon) en lugar de la Service Role.

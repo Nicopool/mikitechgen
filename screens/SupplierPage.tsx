@@ -34,9 +34,13 @@ import {
   Package,
   Layers,
   ArrowRight,
-  Download
+  Download,
+  Store,
+  X
 } from 'lucide-react';
 import { KitBuilder } from '../components/KitBuilder';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { apiClient } from '../lib/apiClient';
 
 ChartJS.register(
   CategoryScale,
@@ -163,7 +167,12 @@ const VendorHome = ({ user, products, orders }: { user: AppUser, products: Produ
                     <span className="px-3 py-1 bg-black text-white text-[8px] font-black uppercase rounded-full">{o.status}</span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button className="px-4 py-2 bg-gray-100 hover:bg-black hover:text-white text-[9px] font-black uppercase rounded-xl transition-all">Procesar</button>
+                    <Link
+                      to="/supplier/orders"
+                      className="px-4 py-2 bg-gray-100 hover:bg-black hover:text-white text-[9px] font-black uppercase rounded-xl transition-all inline-block"
+                    >
+                      Procesar
+                    </Link>
                   </td>
                 </tr>
               ))}
@@ -175,10 +184,216 @@ const VendorHome = ({ user, products, orders }: { user: AppUser, products: Produ
   );
 };
 
+// Product Modal for Creating New Products
+const ProductModal = ({
+  isOpen,
+  onClose,
+  onSave,
+  vendorId
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (product: Partial<Product>) => Promise<void>;
+  vendorId: string;
+}) => {
+  const [formData, setFormData] = useState<Partial<Product>>({
+    name: '',
+    sku: '',
+    price: 0,
+    stock: 0,
+    category: 'Componentes',
+    description: '',
+    image: '',
+    status: 'ACTIVE',
+    vendorId: vendorId
+  });
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSave(formData);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-8" onClick={onClose}>
+      <div className="bg-white rounded-[48px] max-w-3xl w-full max-h-[90vh] overflow-y-auto p-12" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-10">
+          <div>
+            <h2 className="text-3xl font-black uppercase tracking-tight">Nuevo Producto</h2>
+            <p className="text-gray-400 text-xs font-black uppercase tracking-widest mt-2">Añade un producto a tu catálogo</p>
+          </div>
+          <button onClick={onClose} className="p-3 bg-gray-100 rounded-xl hover:bg-black hover:text-white transition-all">
+            <X size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Nombre del Producto *</label>
+              <input
+                required
+                className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="ej. Mouse Gaming RGB"
+              />
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">SKU *</label>
+              <input
+                required
+                className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                value={formData.sku}
+                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                placeholder="ej. MG-001"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-6">
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Precio (USD) *</label>
+              <input
+                required
+                type="number"
+                step="0.01"
+                min="0"
+                className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Stock *</label>
+              <input
+                required
+                type="number"
+                min="0"
+                className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                value={formData.stock}
+                onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) })}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Categoría *</label>
+              <select
+                required
+                className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              >
+                <option value="Componentes">Componentes</option>
+                <option value="Periféricos">Periféricos</option>
+                <option value="Audio">Audio</option>
+                <option value="Monitores">Monitores</option>
+                <option value="Almacenamiento">Almacenamiento</option>
+                <option value="Networking">Networking</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Descripción</label>
+            <textarea
+              className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all resize-none h-32"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Describe las características principales del producto..."
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">URL de Imagen</label>
+            <input
+              className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all"
+              value={formData.image}
+              onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+              placeholder="https://ejemplo.com/imagen.jpg"
+            />
+          </div>
+
+          <div className="flex gap-4 pt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-8 py-5 bg-gray-100 text-[10px] font-black uppercase tracking-widest rounded-2xl hover:bg-gray-200 transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-8 py-5 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-black/20"
+            >
+              Crear Producto
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
 const ProductCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => {
   const { refreshData } = useData();
   const [showModal, setShowModal] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    type?: "danger" | "success";
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
+
   const myProducts = products.filter(p => p.vendorId === user.id);
+
+  const handleCreateProduct = async (productData: Partial<Product>) => {
+    try {
+      await apiClient.createProduct(productData);
+      await refreshData(); // Esto actualiza inmediatamente el contexto para que el producto esté disponible en kits
+      setShowModal(false);
+      alert('Producto creado exitosamente');
+    } catch (error) {
+      alert('Error al crear producto');
+      console.error(error);
+    }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    try {
+      await apiClient.deleteProduct(id);
+      await refreshData();
+    } catch (error) {
+      alert('Error al eliminar producto');
+    }
+  };
+
+  const handleToggleStatus = async (product: Product) => {
+    try {
+      const nextStatus = product.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      await apiClient.updateProduct(product.id, { ...product, status: nextStatus });
+      await refreshData();
+    } catch (error) {
+      alert('Error al cambiar estado');
+    }
+  };
+
+  const filteredProducts = myProducts.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
@@ -198,12 +413,34 @@ const ProductCRUD = ({ user, products }: { user: AppUser, products: Product[] })
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 mb-10">
         <div className="lg:col-span-3 relative">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-          <input className="w-full bg-white border-2 border-gray-100 rounded-[28px] py-5 pl-16 pr-8 text-sm font-bold focus:border-black outline-none transition-all placeholder:text-gray-300" placeholder="Buscar por Nombre o SKU..." />
+          <input
+            className="w-full bg-white border-2 border-gray-100 rounded-[28px] py-5 pl-16 pr-8 text-sm font-bold focus:border-black outline-none transition-all placeholder:text-gray-300"
+            placeholder="Buscar por Nombre o SKU..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
         </div>
         <button className="flex items-center justify-center gap-3 bg-white border-2 border-gray-100 rounded-[28px] text-[10px] font-black uppercase tracking-widest hover:border-black transition-all">
           <Filter size={18} /> Filtros Avanzados
         </button>
       </div>
+
+      <ProductModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        onSave={handleCreateProduct}
+        vendorId={user.id}
+      />
+
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        type={confirmModal.type}
+      />
 
       <div className="border-2 border-gray-100 rounded-[40px] overflow-hidden bg-white">
         <table className="w-full text-left">
@@ -242,21 +479,38 @@ const ProductCRUD = ({ user, products }: { user: AppUser, products: Product[] })
                 </td>
                 <td className="px-10 py-6">
                   <div className="flex items-center gap-2">
-                    <Toggle className={p.status === 'ACTIVE' ? 'text-black' : 'text-gray-300'} size={24} />
+                    <button
+                      onClick={() => handleToggleStatus(p)}
+                      className="focus:outline-none"
+                    >
+                      <Toggle className={p.status === 'ACTIVE' ? 'text-black' : 'text-gray-300'} size={24} />
+                    </button>
                     <span className="text-[9px] font-black uppercase text-gray-400">{p.status === 'ACTIVE' ? 'Activo' : 'Pausado'}</span>
                   </div>
                 </td>
                 <td className="px-10 py-6 text-right">
                   <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
                     <button className="p-3 bg-gray-100 rounded-xl hover:bg-black hover:text-white transition-all"><Edit size={16} /></button>
-                    <button className="p-3 bg-gray-100 rounded-xl hover:text-red-500 transition-all"><Trash2 size={16} /></button>
+                    <button
+                      onClick={() => setConfirmModal({
+                        isOpen: true,
+                        title: 'Eliminar Producto',
+                        message: `¿Estás seguro de eliminar "${p.name}"? Esta acción no se puede deshacer.`,
+                        confirmText: 'Eliminar',
+                        type: 'danger',
+                        onConfirm: () => handleDeleteProduct(p.id)
+                      })}
+                      className="p-3 bg-gray-100 rounded-xl hover:text-red-500 transition-all font-black"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-        {myProducts.length === 0 && <div className="py-20 text-center text-gray-400 font-black uppercase text-xs">No tienes productos publicados.</div>}
+        {filteredProducts.length === 0 && <div className="py-20 text-center text-gray-400 font-black uppercase text-xs">No se encontraron productos.</div>}
       </div>
     </div>
   );
@@ -264,7 +518,30 @@ const ProductCRUD = ({ user, products }: { user: AppUser, products: Product[] })
 const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => {
   const { kits, refreshData } = useData();
   const [showAdd, setShowAdd] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    type?: "danger" | "success";
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
+
   const myKits = kits.filter(k => k.vendorId === user.id);
+
+  const handleDeleteKit = async (id: string) => {
+    try {
+      await apiClient.deleteKit(id);
+      await refreshData();
+    } catch (error) {
+      alert('Error al eliminar kit');
+    }
+  };
   const [newKit, setNewKit] = useState<Partial<Kit>>({
     name: '',
     description: '',
@@ -343,6 +620,16 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
         />
       )}
 
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        type={confirmModal.type}
+      />
+
       {/* Existing Kits Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {myKits.map(k => (
@@ -353,7 +640,19 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
               </div>
               <div className="flex gap-2">
                 <button className="p-2 hover:bg-gray-100 transition-colors"><Edit size={14} /></button>
-                <button className="p-2 hover:bg-red-50 hover:text-red-500 transition-colors"><Trash2 size={14} /></button>
+                <button
+                  onClick={() => setConfirmModal({
+                    isOpen: true,
+                    title: 'Eliminar Kit',
+                    message: `¿Estás seguro de eliminar el kit "${k.name}"?`,
+                    confirmText: 'Eliminar',
+                    type: 'danger',
+                    onConfirm: () => handleDeleteKit(k.id)
+                  })}
+                  className="p-2 hover:bg-red-50 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
               </div>
             </div>
             <h3 className="text-lg font-black uppercase tracking-tight mb-2 truncate">{k.name}</h3>
@@ -410,11 +709,23 @@ export const SupplierPage: React.FC<SupplierProps> = ({ user, products }) => {
                       <td className="px-10 py-8 text-xs uppercase">#{o.id.slice(0, 8)}</td>
                       <td className="px-10 py-8 text-xs text-gray-400 uppercase">{new Date(o.createdAt).toLocaleDateString()}</td>
                       <td className="px-10 py-8">
-                        <select className="bg-gray-50 border-none rounded-full px-4 py-2 text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-black">
+                        <select
+                          className="bg-gray-50 border-none rounded-full px-4 py-2 text-[10px] font-black uppercase outline-none focus:ring-2 focus:ring-black"
+                          defaultValue={o.status}
+                          onChange={async (e) => {
+                            try {
+                              await apiClient.updateOrderStatus(o.id, e.target.value);
+                              await refreshData();
+                            } catch (error) {
+                              alert('Error al actualizar estado');
+                            }
+                          }}
+                        >
                           <option value="PENDING">Pendiente</option>
                           <option value="ACCEPTED">Aceptado</option>
                           <option value="SHIPPED">Enviado / Transfiriendo</option>
-                          <option value="COMPLETED">Entregado / Finalizado</option>
+                          <option value="DELIVERED">Entregado</option>
+                          <option value="COMPLETED">Finalizado</option>
                         </select>
                       </td>
                       <td className="px-10 py-8 text-lg">${o.totalAmount.toFixed(2)}</td>
@@ -432,7 +743,26 @@ export const SupplierPage: React.FC<SupplierProps> = ({ user, products }) => {
           <div className="space-y-10 animate-in fade-in duration-700">
             <div className="flex justify-between items-end">
               <h2 className="text-4xl font-black uppercase tracking-tighter">Control de <span className="text-gray-300">Inventario</span></h2>
-              <button className="flex items-center gap-3 px-8 py-4 border-2 border-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all">
+              <button
+                onClick={() => {
+                  const myInventory = products.filter(p => p.vendorId === user.id);
+                  const csv = [
+                    ['SKU', 'Nombre', 'Precio', 'Stock', 'Estado'],
+                    ...myInventory.map(p => [p.sku, p.name, p.price, p.stock, p.status])
+                  ].map(e => e.join(",")).join("\n");
+
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                  const link = document.createElement("a");
+                  const url = URL.createObjectURL(blob);
+                  link.setAttribute("href", url);
+                  link.setAttribute("download", `inventario-${user.name.toLowerCase()}.csv`);
+                  link.style.visibility = 'hidden';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                }}
+                className="flex items-center gap-3 px-8 py-4 border-2 border-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all"
+              >
                 <Download size={16} /> Exportar CSV
               </button>
             </div>
@@ -467,7 +797,19 @@ export const SupplierPage: React.FC<SupplierProps> = ({ user, products }) => {
                         <p className="text-[8px] font-black text-gray-400 uppercase mb-1">Stock Actual</p>
                         <p className="font-black">{p.stock} uds</p>
                       </div>
-                      <button className="px-6 py-3 bg-black text-white text-[10px] font-black uppercase rounded-xl hover:scale-105 transition-all">Ajustar</button>
+                      <button
+                        onClick={() => {
+                          const newStock = prompt('Nuevo stock:', p.stock.toString());
+                          if (newStock !== null) {
+                            apiClient.updateProduct(p.id, { ...p, stock: parseInt(newStock) || 0 })
+                              .then(() => refreshData())
+                              .catch(() => alert('Error al actualizar stock'));
+                          }
+                        }}
+                        className="px-6 py-3 bg-black text-white text-[10px] font-black uppercase rounded-xl hover:scale-105 transition-all"
+                      >
+                        Ajustar
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -529,7 +871,12 @@ export const SupplierPage: React.FC<SupplierProps> = ({ user, products }) => {
               </div>
 
               <div className="pt-6">
-                <button className="px-12 py-6 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-black/20">Actualizar Punto de Venta</button>
+                <button
+                  onClick={() => alert('Configuración de la tienda actualizada (Simulado)')}
+                  className="px-12 py-6 bg-black text-white text-[10px] font-black uppercase tracking-widest rounded-2xl hover:scale-105 transition-all shadow-2xl shadow-black/20"
+                >
+                  Actualizar Punto de Venta
+                </button>
               </div>
             </div>
           </div>

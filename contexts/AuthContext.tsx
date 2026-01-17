@@ -109,16 +109,58 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const fetchProfile = async (userId: string) => {
         try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
+            // Updated to query 'users' table, assuming migrated data or schema alignment
+            // If the table is 'profiles' (from schema.sql), use that. 
+            // Earlier check showed 'profiles' in schema, but migration script implies 'users'.
+            // Let's try 'users' first as migration usually wins, or 'profiles' if that fails.
+            // Actually, based on previous step schema view, the table IS 'profiles' in the SQL file,
+            // BUT the Supabase dashboard usually has `users` in `auth.users`.
+            // The public table for app data seems to be `profiles` based on `supabase_schema.sql` BUT `lib/supabase.ts` uses `users`.
+            // Consistency is key. `lib/supabase.ts` is the active library for DataContext.
+            // I will align this with `lib/supabase.ts` which uses `users`.
+            // Wait, schema.sql says `profiles`. Migration script says `users`.
+            // If migration script ran, `users` exists.
 
-            if (error) {
-                console.error('Error fetching profile:', error);
+            const { data, error } = await supabase
+                .from('users') // Aligning with lib/supabase.ts and migration script
+                .select('*')
+                .eq('id', userId) // CAREFUL: userId from auth is UUID, users.id might be int if migrated from MySQL directly?
+                // If Migration preserved IDs as INT, we have a problem linking Auth (UUID) to User (Int).
+                // However, usually we match by Email.
+                .maybeSingle();
+
+            if (data) {
+                // Found by ID (if UUIDs match)
+                setProfile({
+                    id: data.id.toString(),
+                    email: data.email,
+                    name: `${data.first_name} ${data.last_name}`,
+                    role: data.role === 'PROVIDER' ? 'VENDOR' : data.role,
+                    status: data.enabled ? 'ACTIVE' : 'INACTIVE',
+                    phone: data.phone,
+                    createdAt: data.created_at
+                });
             } else {
-                setProfile(data);
+                // Try by Email as fallback (common in migration scenarios)
+                const { data: userByEmail } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('email', user?.email) // session user email
+                    .maybeSingle();
+
+                if (userByEmail) {
+                    setProfile({
+                        id: userByEmail.id.toString(),
+                        email: userByEmail.email,
+                        name: `${userByEmail.first_name} ${userByEmail.last_name}`,
+                        role: userByEmail.role === 'PROVIDER' ? 'VENDOR' : userByEmail.role,
+                        status: userByEmail.enabled ? 'ACTIVE' : 'INACTIVE',
+                        phone: userByEmail.phone,
+                        createdAt: userByEmail.created_at
+                    });
+                } else {
+                    console.warn('Profile not found in public.users');
+                }
             }
         } catch (err) {
             console.error(err);
