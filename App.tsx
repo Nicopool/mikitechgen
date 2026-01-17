@@ -22,7 +22,10 @@ const AuthenticatedApp = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!authLoading && user && profile) {
+    if (!authLoading && user) {
+      // Wait for profile to load if user exists
+      if (!profile) return;
+
       if (window.location.pathname === '/login') {
         if (profile.role === 'ADMIN') navigate('/admin');
         else if (profile.role === 'VENDOR') navigate('/supplier');

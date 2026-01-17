@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { Product, Kit, Order, AppUser, SubOrder } from '../types';
@@ -588,6 +588,7 @@ const ProductCRUD = ({ user, products }: { user: AppUser, products: Product[] })
 const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => {
   const { kits, refreshData } = useData();
   const [showAdd, setShowAdd] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -602,11 +603,33 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
     onConfirm: () => { },
   });
 
+  // Wait for data to load
+  useEffect(() => {
+    if (products && Array.isArray(products)) {
+      setLoading(false);
+    }
+  }, [products]);
+
+  // Safe array handling - ensure kits is always an array
+  const safeKits = Array.isArray(kits) ? kits : [];
+  const safeProducts = Array.isArray(products) ? products : [];
+
   // For demo users (string IDs), show all kits. For real users, filter by vendorId
   const isDemoUser = typeof user.id === 'string' && user.id.startsWith('demo-');
   const myKits = isDemoUser
-    ? kits
-    : kits.filter(k => String(k.vendorId) === String(user.id));
+    ? safeKits
+    : safeKits.filter(k => String(k.vendorId) === String(user.id));
+
+  // --- FILTER LOGIC ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  const filteredKits = myKits.filter(k => {
+    const matchesSearch = k.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'ALL' || (k.status || 'ACTIVE') === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
 
   const handleDeleteKit = async (id: string) => {
     try {
@@ -625,7 +648,7 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
     image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&q=80&w=400'
   });
 
-  const myProducts = products.filter(p => p.vendorId === user.id);
+  const myProducts = safeProducts.filter(p => p.vendorId === user.id);
   const originalPrice = (newKit.products || []).reduce((acc, kp) => {
     const p = myProducts.find(x => x.id === kp.productId);
     return acc + (p?.price || 0) * kp.quantity;
@@ -686,6 +709,18 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
     }
   };
 
+  // Loading state
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-gray-200 border-t-black rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-500 font-bold uppercase text-sm">Cargando kits...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
       <div className="flex justify-between items-end">
@@ -722,9 +757,33 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
         type={confirmModal.type}
       />
 
+      {/* Filters & Controls */}
+      <div className="flex flex-col md:flex-row gap-4 bg-white p-4 rounded-3xl border border-gray-100 mb-8">
+        <div className="flex-1 flex items-center gap-3 bg-gray-50 px-4 py-3 rounded-2xl border border-gray-200 focus-within:border-black transition-colors">
+          <Search size={18} className="text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar kit por nombre..."
+            className="bg-transparent border-none outline-none text-sm font-bold w-full uppercase placeholder-gray-400"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-6 py-3 bg-gray-50 rounded-2xl border border-gray-200 text-xs font-black uppercase outline-none focus:border-black cursor-pointer"
+        >
+          <option value="ALL">Todo ({myKits.length})</option>
+          <option value="ACTIVE">Activos</option>
+          <option value="DRAFT">Borradores</option>
+          <option value="ARCHIVED">Archivados</option>
+        </select>
+      </div>
+
       {/* Existing Kits Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {myKits.map(k => (
+        {filteredKits.map(k => (
           <div key={k.id} className="p-8 border-2 border-gray-100 bg-white group hover:border-black transition-all rounded-[32px] relative">
 
             <div className="mb-6">
@@ -732,8 +791,13 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
                 currentImage={k.image}
                 itemName={k.name}
                 onImageUpdate={async (url) => {
-                  await apiClient.updateKitImage(k.id, url);
-                  refreshData();
+                  try {
+                    await apiClient.updateKitImage(k.id, url);
+                    await refreshData();
+                  } catch (error) {
+                    console.error('Error updating kit image:', error);
+                    alert('Error al actualizar la imagen');
+                  }
                 }}
               />
             </div>
@@ -763,15 +827,15 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
               </div>
             </div>
             <div className="flex items-center gap-3 mb-6">
-              <span className="px-3 py-1 bg-gray-50 text-[8px] font-bold uppercase">{k.products.length} Productos</span>
+              <span className="px-3 py-1 bg-gray-50 text-[8px] font-bold uppercase">{(k.products || []).length} Productos</span>
               <span className="px-3 py-1 bg-green-50 text-green-600 text-[8px] font-bold uppercase">Activo</span>
             </div>
             <div className="flex items-end justify-between border-t-2 border-dashed border-gray-50 pt-6">
               <div>
                 <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mb-1">Precio Kit</p>
-                <p className="text-2xl font-black">${k.price.toFixed(2)}</p>
+                <p className="text-2xl font-black">${(k.price || 0).toFixed(2)}</p>
               </div>
-              <p className="text-[8px] font-bold text-gray-300 line-through">${k.originalPrice?.toFixed(2)}</p>
+              <p className="text-[8px] font-bold text-gray-300 line-through">${(k.originalPrice || 0).toFixed(2)}</p>
             </div>
           </div>
         ))}

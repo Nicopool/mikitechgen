@@ -4,10 +4,13 @@ const cors = require('cors');
 require('dotenv').config({ path: '.env.local' });
 
 const app = express();
-const PORT = 3001;
+const PORT = 3002;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3005', 'http://localhost:3006'],
+    credentials: true
+}));
 app.use(express.json());
 
 // MySQL Connection Pool
@@ -398,7 +401,7 @@ app.post('/api/kits', async (req, res) => {
 
         // Generate default image if not provided
         // Use local default-kit.png (Nano Banana Pro style) as requested
-        const defaultImage = 'http://localhost:3000/default-kit.png';
+        const defaultImage = 'http://localhost:3005/default-kit.png';
         const kitImage = image || defaultImage;
 
         // Insert kit
@@ -679,6 +682,102 @@ app.patch('/api/users/:id/status', async (req, res) => {
 });
 
 
+// ============= USERS ENDPOINTS (PATCH ROLE) =============
+
+// Update user role
+app.patch('/api/users/:id/role', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role } = req.body; // Expecting 'USER', 'PROVIDER', 'ADMIN'
+
+        if (!['USER', 'PROVIDER', 'ADMIN'].includes(role)) {
+            return res.status(400).json({ error: 'Invalid role. Must be USER, PROVIDER, or ADMIN' });
+        }
+
+        await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, id]);
+
+        console.log(`✅ User role updated: ID ${id} -> ${role}`);
+        res.json({ message: `User role updated to ${role}` });
+    } catch (error) {
+        console.error('Error updating user role:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============= PRODUCTS ENDPOINTS (PATCH STATUS) =============
+
+// Toggle product status (Activate/Deactivate)
+app.patch('/api/products/:id/status', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body; // Expecting 'ACTIVE' or 'INACTIVE'
+
+        const active = status === 'ACTIVE' ? 1 : 0;
+
+        await pool.query('UPDATE products SET active = ? WHERE id = ?', [active, id]);
+
+        console.log(`✅ Product status updated: ID ${id} -> ${status}`);
+        res.json({ message: `Product ${status === 'ACTIVE' ? 'activated' : 'deactivated'} successfully` });
+    } catch (error) {
+        console.error('Error updating product status:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============= CATEGORIES ENDPOINTS (UPDATE) =============
+
+// Update category
+app.put('/api/categories/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, slug } = req.body;
+
+        if (!name) {
+            return res.status(400).json({ error: 'Name is required' });
+        }
+
+        const updates = [];
+        const values = [];
+
+        if (name) { updates.push('name = ?'); values.push(name); }
+        if (slug) { updates.push('slug = ?'); values.push(slug); }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        values.push(id);
+        await pool.query(
+            `UPDATE categories SET ${updates.join(', ')} WHERE id = ?`,
+            values
+        );
+
+        console.log(`✅ Category updated: ID ${id}`);
+        res.json({ message: 'Category updated successfully' });
+    } catch (error) {
+        console.error('Error updating category:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Toggle category status
+app.patch('/api/categories/:id/status', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { active } = req.body; // Expecting boolean or 'ACTIVE'/'INACTIVE'
+
+        const activeValue = (active === true || active === 'ACTIVE') ? 1 : 0;
+
+        await pool.query('UPDATE categories SET active = ? WHERE id = ?', [activeValue, id]);
+
+        console.log(`✅ Category status updated: ID ${id} -> ${activeValue ? 'ACTIVE' : 'INACTIVE'}`);
+        res.json({ message: `Category ${activeValue ? 'activated' : 'deactivated'} successfully` });
+    } catch (error) {
+        console.error('Error updating category status:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============= STATS ENDPOINTS =============
 
 // Get dashboard stats
@@ -699,6 +798,204 @@ app.get('/api/stats/dashboard', async (req, res) => {
         });
     } catch (error) {
         console.error('Error fetching stats:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============= REPORTS ENDPOINTS =============
+
+// Get top vendors by sales
+app.get('/api/reports/top-vendors', async (req, res) => {
+    try {
+        const [vendors] = await pool.query(`
+            SELECT 
+                u.id,
+                CONCAT(u.first_name, ' ', u.last_name) as name,
+                u.email,
+                COUNT(DISTINCT oi.order_id) as totalOrders,
+                SUM(oi.quantity * oi.unit_price) as totalSales,
+                COUNT(DISTINCT p.id) as totalProducts
+            FROM users u
+            LEFT JOIN products p ON u.id = p.provider_id
+            LEFT JOIN order_items oi ON p.id = oi.product_id
+            WHERE u.role = 'PROVIDER'
+            GROUP BY u.id, u.first_name, u.last_name, u.email
+            ORDER BY totalSales DESC
+            LIMIT 10
+        `);
+
+        const formattedVendors = vendors.map(v => ({
+            id: v.id.toString(),
+            name: v.name,
+            email: v.email,
+            totalOrders: v.totalOrders || 0,
+            totalSales: parseFloat(v.totalSales) || 0,
+            totalProducts: v.totalProducts || 0
+        }));
+
+        res.json(formattedVendors);
+    } catch (error) {
+        console.error('Error fetching top vendors:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get top categories by sales
+app.get('/api/reports/top-categories', async (req, res) => {
+    try {
+        const [categories] = await pool.query(`
+            SELECT 
+                c.id,
+                c.name,
+                COUNT(DISTINCT p.id) as totalProducts,
+                COUNT(DISTINCT oi.order_id) as totalOrders,
+                SUM(oi.quantity * oi.unit_price) as totalSales
+            FROM categories c
+            LEFT JOIN product_categories pc ON c.id = pc.category_id
+            LEFT JOIN products p ON pc.product_id = p.id
+            LEFT JOIN order_items oi ON p.id = oi.product_id
+            GROUP BY c.id, c.name
+            ORDER BY totalSales DESC
+            LIMIT 10
+        `);
+
+        const formattedCategories = categories.map(c => ({
+            id: c.id.toString(),
+            name: c.name,
+            totalProducts: c.totalProducts || 0,
+            totalOrders: c.totalOrders || 0,
+            totalSales: parseFloat(c.totalSales) || 0
+        }));
+
+        res.json(formattedCategories);
+    } catch (error) {
+        console.error('Error fetching top categories:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get orders by status
+app.get('/api/reports/orders-by-status', async (req, res) => {
+    try {
+        const [statusData] = await pool.query(`
+            SELECT 
+                status,
+                COUNT(*) as count,
+                SUM(total_amount) as totalAmount
+            FROM orders
+            GROUP BY status
+            ORDER BY count DESC
+        `);
+
+        const formattedData = statusData.map(s => ({
+            status: s.status,
+            count: s.count,
+            totalAmount: parseFloat(s.totalAmount) || 0
+        }));
+
+        res.json(formattedData);
+    } catch (error) {
+        console.error('Error fetching orders by status:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get critical inventory (low stock products)
+app.get('/api/reports/critical-inventory', async (req, res) => {
+    try {
+        const threshold = parseInt(req.query.threshold) || 10;
+
+        const [products] = await pool.query(`
+            SELECT 
+                p.id,
+                p.name,
+                p.sku,
+                p.stock,
+                p.price,
+                CONCAT(u.first_name, ' ', u.last_name) as vendorName,
+                c.name as category
+            FROM products p
+            LEFT JOIN users u ON p.provider_id = u.id
+            LEFT JOIN product_categories pc ON p.id = pc.product_id
+            LEFT JOIN categories c ON pc.category_id = c.id
+            WHERE p.stock <= ? AND p.active = 1
+            ORDER BY p.stock ASC
+        `, [threshold]);
+
+        const formattedProducts = products.map(p => ({
+            id: p.id.toString(),
+            name: p.name,
+            sku: p.sku || 'N/A',
+            stock: p.stock,
+            price: parseFloat(p.price),
+            vendorName: p.vendorName || 'N/A',
+            category: p.category || 'Sin categoría'
+        }));
+
+        res.json(formattedProducts);
+    } catch (error) {
+        console.error('Error fetching critical inventory:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Get vendor performance
+app.get('/api/reports/vendor-performance/:vendorId', async (req, res) => {
+    try {
+        const { vendorId } = req.params;
+
+        // Get vendor basic info
+        const [vendorInfo] = await pool.query(`
+            SELECT 
+                id,
+                CONCAT(first_name, ' ', last_name) as name,
+                email,
+                created_at as joinDate
+            FROM users
+            WHERE id = ? AND role = 'PROVIDER'
+        `, [vendorId]);
+
+        if (vendorInfo.length === 0) {
+            return res.status(404).json({ error: 'Vendor not found' });
+        }
+
+        // Get sales stats
+        const [salesStats] = await pool.query(`
+            SELECT 
+                COUNT(DISTINCT oi.order_id) as totalOrders,
+                SUM(oi.quantity * oi.unit_price) as totalSales,
+                AVG(oi.unit_price) as avgOrderValue
+            FROM products p
+            LEFT JOIN order_items oi ON p.id = oi.product_id
+            WHERE p.provider_id = ?
+        `, [vendorId]);
+
+        // Get product count
+        const [productStats] = await pool.query(`
+            SELECT 
+                COUNT(*) as totalProducts,
+                SUM(stock) as totalStock
+            FROM products
+            WHERE provider_id = ? AND active = 1
+        `, [vendorId]);
+
+        res.json({
+            vendor: {
+                id: vendorInfo[0].id.toString(),
+                name: vendorInfo[0].name,
+                email: vendorInfo[0].email,
+                joinDate: vendorInfo[0].joinDate
+            },
+            performance: {
+                totalOrders: salesStats[0].totalOrders || 0,
+                totalSales: parseFloat(salesStats[0].totalSales) || 0,
+                avgOrderValue: parseFloat(salesStats[0].avgOrderValue) || 0,
+                totalProducts: productStats[0].totalProducts || 0,
+                totalStock: productStats[0].totalStock || 0
+            }
+        });
+    } catch (error) {
+        console.error('Error fetching vendor performance:', error);
         res.status(500).json({ error: error.message });
     }
 });

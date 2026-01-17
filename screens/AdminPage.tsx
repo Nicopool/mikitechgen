@@ -1,10 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route, Link, useNavigate } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { Category, Product, AppUser, Order } from '../types';
 import { supabase } from '../lib/supabaseClient';
 import { useData } from '../contexts/DataContext';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Bar,
   Doughnut,
@@ -46,11 +47,19 @@ import {
   X,
   Check,
   XCircle,
-  Edit
+  Edit,
+  ToggleLeft,
+  ToggleRight,
+  Award,
+  TrendingDown
 } from 'lucide-react';
 import { generatePDFReport } from '../lib/pdfGenerator';
+import { generateHTMLReport } from '../lib/htmlReportGenerator';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { KitBuilder } from '../components/KitBuilder';
+import { EditUserModal } from '../components/EditUserModal';
+import { EditProductModal } from '../components/EditProductModal';
+import { EditCategoryModal } from '../components/EditCategoryModal';
 import { Kit } from '../types';
 import { apiClient } from '../lib/apiClient';
 
@@ -311,11 +320,12 @@ const UserManagement = ({ users }: { users: AppUser[] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
 
   const toggleStatus = async (id: string, current: string) => {
     const next = current === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
     try {
-      const response = await fetch(`http://localhost:3001/api/users/${id}/status`, {
+      const response = await fetch(`http://localhost:3002/api/users/${id}/status`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -330,6 +340,44 @@ const UserManagement = ({ users }: { users: AppUser[] }) => {
     } catch (error) {
       console.error('Error updating user status:', error);
       alert('Error de conexión');
+    }
+  };
+
+  const handleSaveUser = async (userId: string, data: Partial<AppUser>) => {
+    try {
+      // Update basic info
+      const response = await fetch(`http://localhost:3002/api/users/${userId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          phone: data.phone
+        })
+      });
+
+      if (!response.ok) throw new Error('Error updating user');
+
+      // Update role if changed
+      if (data.role) {
+        const roleResponse = await fetch(`http://localhost:3002/api/users/${userId}/role`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ role: data.role })
+        });
+
+        if (!roleResponse.ok) throw new Error('Error updating role');
+      }
+
+      await refreshData();
+      alert('Usuario actualizado correctamente');
+    } catch (error) {
+      console.error('Error saving user:', error);
+      throw error;
     }
   };
 
@@ -352,6 +400,12 @@ const UserManagement = ({ users }: { users: AppUser[] }) => {
 
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
+      <EditUserModal
+        user={editingUser}
+        onClose={() => setEditingUser(null)}
+        onSave={handleSaveUser}
+      />
+
       <div className="flex justify-between items-end">
         <h2 className="text-4xl font-black uppercase tracking-tighter">Gestión de <span className="text-gray-300">Usuarios</span></h2>
 
@@ -433,6 +487,13 @@ const UserManagement = ({ users }: { users: AppUser[] }) => {
                 </td>
                 <td className="px-10 py-8 text-right">
                   <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      onClick={() => setEditingUser(u)}
+                      className="p-3 bg-blue-50 text-blue-400 rounded-xl hover:bg-blue-500 hover:text-white transition-all"
+                      title="Editar usuario"
+                    >
+                      <Edit size={18} />
+                    </button>
                     {u.status === 'ACTIVE' ? (
                       <button onClick={() => toggleStatus(u.id, u.status)} className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"><UserX size={18} /></button>
                     ) : (
@@ -451,6 +512,327 @@ const UserManagement = ({ users }: { users: AppUser[] }) => {
             )}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+};
+
+// Catalog Management Component
+const CatalogManagement = ({ products, categories }: { products: Product[], categories: Category[] }) => {
+  const { refreshData } = useData();
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    type?: "danger" | "success";
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
+
+  const handleSaveProduct = async (productId: string, data: Partial<Product>) => {
+    try {
+      const response = await fetch(`http://localhost:3002/api/products/${productId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) throw new Error('Error updating product');
+
+      await refreshData();
+      alert('Producto actualizado correctamente');
+    } catch (error) {
+      console.error('Error saving product:', error);
+      throw error;
+    }
+  };
+
+  const toggleProductStatus = async (productId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      const response = await fetch(`http://localhost:3002/api/products/${productId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) throw new Error('Error updating product status');
+
+      await refreshData();
+    } catch (error) {
+      console.error('Error toggling product status:', error);
+      alert('Error al cambiar el estado del producto');
+    }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3002/api/products/${productId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) throw new Error('Error deleting product');
+
+      await refreshData();
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('Error al eliminar el producto');
+    }
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-700">
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        type={confirmModal.type}
+      />
+
+      <EditProductModal
+        product={editingProduct}
+        onClose={() => setEditingProduct(null)}
+        onSave={handleSaveProduct}
+        categories={categories}
+      />
+
+      <h2 className="text-4xl font-black uppercase tracking-tighter">Moderación de <span className="text-gray-300">Catálogo</span></h2>
+
+      <div className="border-2 border-gray-100 rounded-[40px] overflow-hidden bg-white">
+        <table className="w-full text-left font-black">
+          <thead className="bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b">
+            <tr>
+              <th className="px-10 py-8">Tipo / Item</th>
+              <th className="px-10 py-8">Proveedor</th>
+              <th className="px-10 py-8">Stock</th>
+              <th className="px-10 py-8">Estado</th>
+              <th className="px-10 py-8 text-right">Moderación</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {products.map(p => (
+              <tr key={p.id} className="hover:bg-gray-50/50 transition-all group">
+                <td className="px-10 py-8">
+                  <div className="flex items-center gap-6">
+                    <div className="w-12 h-12 bg-gray-50 border rounded-xl overflow-hidden">
+                      <img src={p.image} className="w-full h-full object-cover" alt={p.name} />
+                    </div>
+                    <div>
+                      <p className="font-black uppercase text-sm">{p.name}</p>
+                      <p className="text-[9px] font-black text-gray-400 tracking-[0.2em]">{p.category}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="px-10 py-8 text-xs text-gray-400 uppercase tracking-widest">{p.vendorName || 'Sistema'}</td>
+                <td className="px-10 py-8 text-sm">{p.stock} uds</td>
+                <td className="px-10 py-8">
+                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${p.status === 'ACTIVE' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                    {p.status === 'ACTIVE' ? '✓ Activo' : '✗ Inactivo'}
+                  </span>
+                </td>
+                <td className="px-10 py-8 text-right">
+                  <div className="flex items-center justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all">
+                    <button
+                      onClick={() => setEditingProduct(p)}
+                      className="p-3 bg-blue-50 text-blue-400 rounded-xl hover:bg-blue-500 hover:text-white transition-all"
+                      title="Editar producto"
+                    >
+                      <Edit size={18} />
+                    </button>
+                    <button
+                      onClick={() => toggleProductStatus(p.id, p.status || 'ACTIVE')}
+                      className={`p-3 rounded-xl transition-all ${p.status === 'ACTIVE' ? 'bg-orange-50 text-orange-400 hover:bg-orange-500 hover:text-white' : 'bg-green-50 text-green-400 hover:bg-green-500 hover:text-white'}`}
+                      title={p.status === 'ACTIVE' ? 'Desactivar' : 'Activar'}
+                    >
+                      {p.status === 'ACTIVE' ? <ToggleRight size={18} /> : <ToggleLeft size={18} />}
+                    </button>
+                    <button
+                      onClick={() => setConfirmModal({
+                        isOpen: true,
+                        title: 'Eliminar Producto',
+                        message: `¿Estás seguro de eliminar "${p.name}" del catálogo?`,
+                        confirmText: 'Eliminar',
+                        type: 'danger',
+                        onConfirm: () => handleDeleteProduct(p.id)
+                      })}
+                      className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                      title="Eliminar producto"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// Categories Management Component
+const CategoriesManagement = ({ categories }: { categories: Category[] }) => {
+  const { refreshData } = useData();
+  const [newCat, setNewCat] = useState({ label: '', icon: 'grid_view' });
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    confirmText?: string;
+    type?: "danger" | "success";
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => { },
+  });
+
+  const handleAddCategory = async () => {
+    if (!newCat.label) return;
+    try {
+      const response = await fetch('http://localhost:3002/api/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newCat.label,
+          slug: newCat.label.toLowerCase().replace(/\s+/g, '-'),
+          active: true
+        })
+      });
+
+      if (!response.ok) throw new Error('Error al crear categoría');
+
+      setNewCat({ label: '', icon: 'grid_view' });
+      await refreshData();
+    } catch (error) {
+      console.error('Error adding category:', error);
+      alert('Error al agregar la categoría');
+    }
+  };
+
+  const handleSaveCategory = async (categoryId: string, data: { name: string; slug: string }) => {
+    try {
+      const response = await fetch(`http://localhost:3002/api/categories/${categoryId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+      });
+
+      if (!response.ok) throw new Error('Error updating category');
+
+      await refreshData();
+      alert('Categoría actualizada correctamente');
+    } catch (error) {
+      console.error('Error saving category:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    try {
+      const response = await fetch(`http://localhost:3002/api/categories/${categoryId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) throw new Error('Error al eliminar categoría');
+
+      await refreshData();
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      alert('Error al eliminar la categoría');
+    }
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-700">
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        type={confirmModal.type}
+      />
+
+      <EditCategoryModal
+        category={editingCategory}
+        onClose={() => setEditingCategory(null)}
+        onSave={handleSaveCategory}
+      />
+
+      <div className="flex justify-between items-end bg-black p-12 rounded-[48px] text-white">
+        <div>
+          <h2 className="text-3xl font-black uppercase tracking-tight mb-2">Editor de Taxonomía</h2>
+          <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Estructura del Mercado Digital</p>
+        </div>
+        <div className="flex gap-4">
+          <input
+            placeholder="Nombre Categoría"
+            className="bg-white/10 border-2 border-white/10 rounded-2xl py-4 px-8 focus:border-white outline-none text-white text-sm font-bold"
+            value={newCat.label}
+            onChange={e => setNewCat({ ...newCat, label: e.target.value })}
+          />
+          <button onClick={handleAddCategory} className="px-10 py-4 bg-white text-black text-[10px] font-black uppercase rounded-2xl hover:scale-105 transition-all">Vincular</button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+        {categories.map(c => (
+          <div key={c.id} className="p-8 border-2 border-gray-100 rounded-[40px] bg-white group hover:border-black transition-all">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center group-hover:bg-black group-hover:text-white transition-all">
+                  <span className="material-symbols-outlined text-xl">{c.icon}</span>
+                </div>
+                <p className="font-black uppercase text-xs">{c.label}</p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-4 opacity-0 group-hover:opacity-100 transition-all">
+              <button
+                onClick={() => setEditingCategory(c)}
+                className="flex-1 p-2 bg-blue-50 text-blue-400 rounded-xl hover:bg-blue-500 hover:text-white transition-all text-[10px] font-black uppercase"
+                title="Editar categoría"
+              >
+                <Edit size={14} className="inline mr-1" /> Editar
+              </button>
+              <button
+                onClick={() => setConfirmModal({
+                  isOpen: true,
+                  title: 'Eliminar Categoría',
+                  message: `¿Estás seguro de eliminar la categoría "${c.label}"?`,
+                  confirmText: 'Eliminar',
+                  type: 'danger',
+                  onConfirm: () => handleDeleteCategory(c.id)
+                })}
+                className="p-2 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                title="Eliminar categoría"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -840,95 +1222,10 @@ export const AdminPage: React.FC<AdminProps> = ({ categories, users, products })
           </div>
         } />
         <Route path="catalog" element={
-          <div className="space-y-10 animate-in fade-in duration-700">
-            <h2 className="text-4xl font-black uppercase tracking-tighter">Moderación de <span className="text-gray-300">Catálogo</span></h2>
-            <div className="border-2 border-gray-100 rounded-[40px] overflow-hidden bg-white">
-              <table className="w-full text-left font-black">
-                <thead className="bg-gray-50 text-[10px] font-black uppercase tracking-widest text-gray-400 border-b">
-                  <tr>
-                    <th className="px-10 py-8">Tipo / Item</th>
-                    <th className="px-10 py-8">Proveedor</th>
-                    <th className="px-10 py-8">Stock</th>
-                    <th className="px-10 py-8 text-right">Moderación</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {products.map(p => (
-                    <tr key={p.id} className="hover:bg-gray-50/50 transition-all">
-                      <td className="px-10 py-8">
-                        <div className="flex items-center gap-6">
-                          <div className="w-12 h-12 bg-gray-50 border rounded-xl overflow-hidden"><img src={p.image} className="w-full h-full object-cover" /></div>
-                          <div>
-                            <p className="font-black uppercase text-sm">{p.name}</p>
-                            <p className="text-[9px] font-black text-gray-400 tracking-[0.2em]">{p.category}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-10 py-8 text-xs text-gray-400 uppercase tracking-widest">{p.vendorName || 'Sistema'}</td>
-                      <td className="px-10 py-8 text-sm">{p.stock} uds</td>
-                      <td className="px-10 py-8 text-right">
-                        <button
-                          onClick={() => setConfirmModal({
-                            isOpen: true,
-                            title: 'Eliminar Producto',
-                            message: `¿Estás seguro de eliminar "${p.name}" del catálogo?`,
-                            confirmText: 'Eliminar',
-                            type: 'danger',
-                            onConfirm: () => handleDeleteProduct(p.id)
-                          })}
-                          className="p-3 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <CatalogManagement products={products} categories={categories} />
         } />
         <Route path="categories" element={
-          <div className="space-y-10 animate-in fade-in duration-700">
-            <div className="flex justify-between items-end bg-black p-12 rounded-[48px] text-white">
-              <div>
-                <h2 className="text-3xl font-black uppercase tracking-tight mb-2">Editor de Taxonomía</h2>
-                <p className="text-gray-500 text-[10px] font-black uppercase tracking-widest">Estructura del Mercado Digital</p>
-              </div>
-              <div className="flex gap-4">
-                <input
-                  placeholder="Nombre Categoría"
-                  className="bg-white/10 border-2 border-white/10 rounded-2xl py-4 px-8 focus:border-white outline-none text-white text-sm font-bold"
-                  value={newCat.label}
-                  onChange={e => setNewCat({ ...newCat, label: e.target.value })}
-                />
-                <button onClick={handleAddCategory} className="px-10 py-4 bg-white text-black text-[10px] font-black uppercase rounded-2xl hover:scale-105 transition-all">Vincular</button>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-              {categories.map(c => (
-                <div key={c.id} className="p-8 border-2 border-gray-100 rounded-[40px] bg-white group hover:border-black transition-all flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center group-hover:bg-black group-hover:text-white transition-all"><span className="material-symbols-outlined text-xl">{c.icon}</span></div>
-                    <p className="font-black uppercase text-xs">{c.label}</p>
-                  </div>
-                  <button
-                    onClick={() => setConfirmModal({
-                      isOpen: true,
-                      title: 'Eliminar Categoría',
-                      message: `¿Estás seguro de eliminar la categoría "${c.label}"?`,
-                      confirmText: 'Eliminar',
-                      type: 'danger',
-                      onConfirm: () => handleDeleteCategory(c.id)
-                    })}
-                    className="text-gray-200 hover:text-red-500 transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+          <CategoriesManagement categories={categories} />
         } />
         <Route path="orders" element={
           <div className="space-y-10 animate-in fade-in duration-700">
@@ -988,136 +1285,228 @@ export const AdminPage: React.FC<AdminProps> = ({ categories, users, products })
                 <h3 className="text-2xl font-black uppercase tracking-tight">Centro de Exportación</h3>
                 <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Generación de Documentos Oficiales</p>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <button
-                  onClick={() => {
-                    try {
-                      console.log('Generando reporte de ventas...', orders);
-                      if (!orders || orders.length === 0) {
-                        alert('No hay órdenes para generar el reporte');
-                        return;
-                      }
-                      generatePDFReport({
-                        title: 'Reporte de Ventas Global',
-                        subtitle: `Total acumulado: $${orders.reduce((acc, o) => acc + o.totalAmount, 0).toFixed(2)}`,
-                        fileName: `ventas-mikitech-${new Date().toISOString().split('T')[0]}.pdf`,
-                        type: 'sales',
-                        columns: [
-                          { header: 'ID Orden', dataKey: 'id' },
-                          { header: 'Cliente', dataKey: 'userName' },
-                          { header: 'Fecha', dataKey: 'createdAt' },
-                          { header: 'Estado', dataKey: 'status' },
-                          { header: 'Total', dataKey: 'totalAmount' }
-                        ],
-                        data: orders.map(o => ({
-                          id: o.id,
-                          userName: o.userName || 'N/A',
-                          createdAt: o.createdAt || new Date().toISOString(),
-                          status: o.status,
-                          totalAmount: o.totalAmount,
-                          total: o.totalAmount // Para el cálculo del resumen
-                        }))
-                      });
-                      console.log('PDF de ventas generado exitosamente');
-                    } catch (error) {
-                      console.error('Error generando PDF de ventas:', error);
-                      alert('Error al generar el PDF de ventas');
-                    }
-                  }}
-                  className="p-8 bg-gray-50 rounded-[32px] hover:bg-black hover:text-white transition-all group text-left"
-                >
-                  <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <FileText size={24} />
-                  </div>
-                  <p className="font-black uppercase text-sm mb-1">Reporte de Ventas</p>
-                  <p className="text-[10px] font-bold text-gray-400 group-hover:text-gray-300">Transacciones y Ingresos</p>
-                </button>
 
-                <button
-                  onClick={() => {
-                    try {
-                      console.log('Generando reporte de inventario...', products);
-                      if (!products || products.length === 0) {
-                        alert('No hay productos para generar el reporte');
-                        return;
+              {/* Sales Reports */}
+              <div className="mb-10">
+                <h4 className="text-lg font-black uppercase mb-4 text-gray-700">📊 Reportes de Ventas</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <button
+                    onClick={() => {
+                      try {
+                        if (!orders || orders.length === 0) {
+                          alert('No hay órdenes para generar el reporte');
+                          return;
+                        }
+                        generatePDFReport({
+                          title: 'Reporte de Ventas Global',
+                          subtitle: `Total acumulado: $${orders.reduce((acc, o) => acc + o.totalAmount, 0).toFixed(2)}`,
+                          fileName: `ventas-mikitech-${new Date().toISOString().split('T')[0]}.pdf`,
+                          type: 'sales',
+                          columns: [
+                            { header: 'ID Orden', dataKey: 'id' },
+                            { header: 'Cliente', dataKey: 'userName' },
+                            { header: 'Fecha', dataKey: 'createdAt' },
+                            { header: 'Estado', dataKey: 'status' },
+                            { header: 'Total', dataKey: 'totalAmount' }
+                          ],
+                          data: orders.map(o => ({
+                            id: o.id,
+                            userName: o.userName || 'N/A',
+                            createdAt: o.createdAt || new Date().toISOString(),
+                            status: o.status,
+                            totalAmount: o.totalAmount,
+                            total: o.totalAmount
+                          }))
+                        });
+                      } catch (error) {
+                        console.error('Error generando PDF de ventas:', error);
+                        alert('Error al generar el PDF de ventas');
                       }
-                      generatePDFReport({
-                        title: 'Inventario Master',
-                        subtitle: `${products.length} productos registrados en catálogo`,
-                        fileName: `inventario-mikitech-${new Date().toISOString().split('T')[0]}.pdf`,
-                        type: 'inventory',
-                        columns: [
-                          { header: 'SKU', dataKey: 'sku' },
-                          { header: 'Producto', dataKey: 'name' },
-                          { header: 'Categoría', dataKey: 'category' },
-                          { header: 'Precio', dataKey: 'price' },
-                          { header: 'Stock', dataKey: 'stock' }
-                        ],
-                        data: products.map(p => ({
-                          sku: p.sku || 'N/A',
-                          name: p.name,
-                          category: p.category || 'Sin categoría',
-                          price: p.price,
-                          stock: p.stock
-                        }))
-                      });
-                      console.log('PDF de inventario generado exitosamente');
-                    } catch (error) {
-                      console.error('Error generando PDF de inventario:', error);
-                      alert('Error al generar el PDF de inventario');
-                    }
-                  }}
-                  className="p-8 bg-gray-50 rounded-[32px] hover:bg-black hover:text-white transition-all group text-left"
-                >
-                  <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <Package size={24} />
-                  </div>
-                  <p className="font-black uppercase text-sm mb-1">Inventario Global</p>
-                  <p className="text-[10px] font-bold text-gray-400 group-hover:text-gray-300">Stock y Valorización</p>
-                </button>
+                    }}
+                    className="p-8 bg-gray-50 rounded-[32px] hover:bg-black hover:text-white transition-all group text-left"
+                  >
+                    <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <FileText size={24} />
+                    </div>
+                    <p className="font-black uppercase text-sm mb-1">Ventas PDF</p>
+                    <p className="text-[10px] font-bold text-gray-400 group-hover:text-gray-300">Formato Imprimible</p>
+                  </button>
 
-                <button
-                  onClick={() => {
-                    try {
-                      console.log('Generando reporte de usuarios...', users);
-                      if (!users || users.length === 0) {
-                        alert('No hay usuarios para generar el reporte');
-                        return;
+                  <button
+                    onClick={() => {
+                      try {
+                        if (!orders || orders.length === 0) {
+                          alert('No hay órdenes para generar el reporte');
+                          return;
+                        }
+                        generateHTMLReport({
+                          title: 'Reporte de Ventas',
+                          subtitle: `Análisis completo de ${orders.length} transacciones`,
+                          type: 'sales',
+                          data: orders
+                        });
+                      } catch (error) {
+                        console.error('Error generando reporte HTML:', error);
+                        alert('Error al generar el reporte HTML');
                       }
-                      generatePDFReport({
-                        title: 'Base de Usuarios',
-                        subtitle: `${users.length} cuentas registradas (Clientes y Proveedores)`,
-                        fileName: `usuarios-mikitech-${new Date().toISOString().split('T')[0]}.pdf`,
-                        type: 'users',
-                        columns: [
-                          { header: 'ID', dataKey: 'id' },
-                          { header: 'Nombre', dataKey: 'name' },
-                          { header: 'Email', dataKey: 'email' },
-                          { header: 'Rol', dataKey: 'role' },
-                          { header: 'Estado', dataKey: 'status' }
-                        ],
-                        data: users.map(u => ({
-                          id: u.id,
-                          name: u.name,
-                          email: u.email,
-                          role: u.role,
-                          status: u.status
-                        }))
-                      });
-                      console.log('PDF de usuarios generado exitosamente');
-                    } catch (error) {
-                      console.error('Error generando PDF de usuarios:', error);
-                      alert('Error al generar el PDF de usuarios');
-                    }
-                  }}
-                  className="p-8 bg-gray-50 rounded-[32px] hover:bg-black hover:text-white transition-all group text-left"
-                >
-                  <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    <Users size={24} />
-                  </div>
-                  <p className="font-black uppercase text-sm mb-1">Reporte de Usuarios</p>
-                  <p className="text-[10px] font-bold text-gray-400 group-hover:text-gray-300">Actividad y Roles</p>
-                </button>
+                    }}
+                    className="p-8 bg-gradient-to-br from-purple-50 to-blue-50 rounded-[32px] hover:from-purple-100 hover:to-blue-100 transition-all group text-left border-2 border-purple-100"
+                  >
+                    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 text-white rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <FileText size={24} />
+                    </div>
+                    <p className="font-black uppercase text-sm mb-1">Ventas HTML</p>
+                    <p className="text-[10px] font-bold text-gray-600">Interactivo y Moderno</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Inventory Reports */}
+              <div className="mb-10">
+                <h4 className="text-lg font-black uppercase mb-4 text-gray-700">📦 Reportes de Inventario</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <button
+                    onClick={() => {
+                      try {
+                        if (!products || products.length === 0) {
+                          alert('No hay productos para generar el reporte');
+                          return;
+                        }
+                        generatePDFReport({
+                          title: 'Inventario Master',
+                          subtitle: `${products.length} productos registrados en catálogo`,
+                          fileName: `inventario-mikitech-${new Date().toISOString().split('T')[0]}.pdf`,
+                          type: 'inventory',
+                          columns: [
+                            { header: 'SKU', dataKey: 'sku' },
+                            { header: 'Producto', dataKey: 'name' },
+                            { header: 'Categoría', dataKey: 'category' },
+                            { header: 'Precio', dataKey: 'price' },
+                            { header: 'Stock', dataKey: 'stock' }
+                          ],
+                          data: products.map(p => ({
+                            sku: p.sku || 'N/A',
+                            name: p.name,
+                            category: p.category || 'Sin categoría',
+                            price: p.price,
+                            stock: p.stock
+                          }))
+                        });
+                      } catch (error) {
+                        console.error('Error generando PDF de inventario:', error);
+                        alert('Error al generar el PDF de inventario');
+                      }
+                    }}
+                    className="p-8 bg-gray-50 rounded-[32px] hover:bg-black hover:text-white transition-all group text-left"
+                  >
+                    <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Package size={24} />
+                    </div>
+                    <p className="font-black uppercase text-sm mb-1">Inventario PDF</p>
+                    <p className="text-[10px] font-bold text-gray-400 group-hover:text-gray-300">Stock y Valorización</p>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      try {
+                        if (!products || products.length === 0) {
+                          alert('No hay productos para generar el reporte');
+                          return;
+                        }
+                        generateHTMLReport({
+                          title: 'Inventario Completo',
+                          subtitle: `Control de stock de ${products.length} productos`,
+                          type: 'inventory',
+                          data: products
+                        });
+                      } catch (error) {
+                        console.error('Error generando reporte HTML:', error);
+                        alert('Error al generar el reporte HTML');
+                      }
+                    }}
+                    className="p-8 bg-gradient-to-br from-green-50 to-emerald-50 rounded-[32px] hover:from-green-100 hover:to-emerald-100 transition-all group text-left border-2 border-green-100"
+                  >
+                    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-500 text-white rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Package size={24} />
+                    </div>
+                    <p className="font-black uppercase text-sm mb-1">Inventario HTML</p>
+                    <p className="text-[10px] font-bold text-gray-600">Con Alertas de Stock</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Users Reports */}
+              <div>
+                <h4 className="text-lg font-black uppercase mb-4 text-gray-700">👥 Reportes de Usuarios</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <button
+                    onClick={() => {
+                      try {
+                        if (!users || users.length === 0) {
+                          alert('No hay usuarios para generar el reporte');
+                          return;
+                        }
+                        generatePDFReport({
+                          title: 'Base de Usuarios',
+                          subtitle: `${users.length} cuentas registradas (Clientes y Proveedores)`,
+                          fileName: `usuarios-mikitech-${new Date().toISOString().split('T')[0]}.pdf`,
+                          type: 'users',
+                          columns: [
+                            { header: 'ID', dataKey: 'id' },
+                            { header: 'Nombre', dataKey: 'name' },
+                            { header: 'Email', dataKey: 'email' },
+                            { header: 'Rol', dataKey: 'role' },
+                            { header: 'Estado', dataKey: 'status' }
+                          ],
+                          data: users.map(u => ({
+                            id: u.id,
+                            name: u.name,
+                            email: u.email,
+                            role: u.role,
+                            status: u.status
+                          }))
+                        });
+                      } catch (error) {
+                        console.error('Error generando PDF de usuarios:', error);
+                        alert('Error al generar el PDF de usuarios');
+                      }
+                    }}
+                    className="p-8 bg-gray-50 rounded-[32px] hover:bg-black hover:text-white transition-all group text-left"
+                  >
+                    <div className="w-12 h-12 bg-white text-black rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Users size={24} />
+                    </div>
+                    <p className="font-black uppercase text-sm mb-1">Usuarios PDF</p>
+                    <p className="text-[10px] font-bold text-gray-400 group-hover:text-gray-300">Actividad y Roles</p>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      try {
+                        if (!users || users.length === 0) {
+                          alert('No hay usuarios para generar el reporte');
+                          return;
+                        }
+                        generateHTMLReport({
+                          title: 'Directorio de Usuarios',
+                          subtitle: `Base de datos completa con ${users.length} usuarios`,
+                          type: 'users',
+                          data: users
+                        });
+                      } catch (error) {
+                        console.error('Error generando reporte HTML:', error);
+                        alert('Error al generar el reporte HTML');
+                      }
+                    }}
+                    className="p-8 bg-gradient-to-br from-orange-50 to-red-50 rounded-[32px] hover:from-orange-100 hover:to-red-100 transition-all group text-left border-2 border-orange-100"
+                  >
+                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-500 text-white rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                      <Users size={24} />
+                    </div>
+                    <p className="font-black uppercase text-sm mb-1">Usuarios HTML</p>
+                    <p className="text-[10px] font-bold text-gray-600">Vista Detallada</p>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
