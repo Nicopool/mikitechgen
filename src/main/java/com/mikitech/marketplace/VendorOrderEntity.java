@@ -7,29 +7,28 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "products")
+@Table(name = "vendor_orders")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ProductEntity {
+public class VendorOrderEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(name = "order_id")
+    private Long orderId;
+
     @Column(name = "provider_id")
     private Long providerId;
 
-    private String name;
-    private String slug;
-    private String description;
-    private String sku;
-    private Double price;
-    private Integer stock;
+    private String status;
 
-    @Column(name = "image_url")
-    private String imageUrl;
+    @Column(name = "total_amount")
+    private Double totalAmount;
 
-    private Boolean active;
+    @Column(name = "tracking_number")
+    private String trackingNumber;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { DataProvider, useData } from './contexts/DataContextSupabase';
+import { DataProvider, useData } from './contexts/DataContext';
 import { CartProvider } from './contexts/CartContext';
 
 // Screens
@@ -46,7 +46,7 @@ const AuthenticatedApp = () => {
     <div className="bg-white min-h-screen text-gray-900">
       <Routes>
         <Route path="/" element={<HomePage categories={categories} products={products} kits={kits} />} />
-        <Route path="/shop" element={<Shop products={products} categories={categories} kits={kits} />} />
+        <Route path="/shop" element={<Shop />} />
         <Route path="/kit/:id" element={<KitDetailPage />} />
         <Route path="/about" element={<AboutPage />} /> {/* Added About Route */}
         <Route path="/checkout" element={<CheckoutPage />} />

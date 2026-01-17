@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { Product, Kit } from '../types';
-import { X, Plus, Minus, Check, ArrowRight, ArrowLeft, Package, DollarSign, Image as ImageIcon, FileText, Trash2, Search } from 'lucide-react';
+import { X, Plus, Minus, Check, ArrowRight, ArrowLeft, Package, DollarSign, Image as ImageIcon, FileText, Trash2, Search, Sparkles, Wand2 } from 'lucide-react';
+import { generateKitSuggestions, improveDescription, suggestKitPrice } from '../lib/aiKitSuggestions';
 
 interface KitBuilderProps {
     products: Product[];
     vendorId: string;
     onSave: (kit: Partial<Kit>) => Promise<void>;
     onCancel: () => void;
+    initialKit?: Partial<Kit>;
 }
 
-export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSave, onCancel }) => {
+export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSave, onCancel, initialKit }) => {
     const [step, setStep] = useState(1);
     const [searchTerm, setSearchTerm] = useState('');
-    const [kit, setKit] = useState<Partial<Kit>>({
+    const [aiLoading, setAiLoading] = useState(false);
+    const [kit, setKit] = useState<Partial<Kit>>(initialKit || {
         name: '',
         description: '',
         products: [],
@@ -79,13 +82,72 @@ export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSa
         });
     };
 
+    // AI Functions
+    const handleAISuggest = async () => {
+        if (aiLoading) return;
+        setAiLoading(true);
+        try {
+            const selectedProducts = (kit.products || []).map(kp =>
+                products.find(p => p.id === kp.productId)
+            ).filter(Boolean) as Product[];
+
+            const suggestions = await generateKitSuggestions(
+                selectedProducts.length > 0 ? selectedProducts : products.slice(0, 3)
+            );
+
+            setKit(prev => ({
+                ...prev,
+                name: suggestions.name || prev.name,
+                description: suggestions.description || prev.description
+            }));
+        } catch (error) {
+            console.error('AI suggestion error:', error);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleAIImproveDescription = async () => {
+        if (aiLoading || !kit.description) return;
+        setAiLoading(true);
+        try {
+            const selectedProducts = (kit.products || []).map(kp =>
+                products.find(p => p.id === kp.productId)
+            ).filter(Boolean) as Product[];
+
+            const improved = await improveDescription(kit.description, selectedProducts);
+            setKit(prev => ({ ...prev, description: improved }));
+        } catch (error) {
+            console.error('AI improve error:', error);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleAISuggestPrice = async () => {
+        if (aiLoading || originalPrice === 0) return;
+        setAiLoading(true);
+        try {
+            const selectedProducts = (kit.products || []).map(kp =>
+                products.find(p => p.id === kp.productId)
+            ).filter(Boolean) as Product[];
+
+            const { suggestedPrice } = await suggestKitPrice(selectedProducts, originalPrice);
+            setKit(prev => ({ ...prev, price: suggestedPrice }));
+        } catch (error) {
+            console.error('AI price error:', error);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-6">
             <div className="bg-white w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
                 {/* Header */}
                 <div className="p-8 border-b border-gray-200 flex items-center justify-between">
                     <div>
-                        <h2 className="text-3xl font-display font-black uppercase tracking-tight">Crear Nuevo Kit</h2>
+                        <h2 className="text-3xl font-display font-black uppercase tracking-tight">{initialKit ? 'Editar Kit' : 'Crear Nuevo Kit'}</h2>
                         <p className="text-sm text-gray-500 mt-2">Paso {step} de 4</p>
                     </div>
                     <button onClick={onCancel} className="p-3 hover:bg-gray-100 transition-colors">
@@ -153,8 +215,30 @@ export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSa
                                             value={kit.description}
                                             onChange={e => setKit({ ...kit, description: e.target.value })}
                                         />
-                                        <p className="text-xs text-gray-400 mt-2">{kit.description?.length || 0}/500 caracteres</p>
+                                        <div className="flex items-center justify-between mt-2">
+                                            <p className="text-xs text-gray-400">{kit.description?.length || 0}/500 caracteres</p>
+                                            <button
+                                                type="button"
+                                                onClick={handleAIImproveDescription}
+                                                disabled={aiLoading || !kit.description}
+                                                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-purple-600 bg-purple-50 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                            >
+                                                <Wand2 size={14} className={aiLoading ? 'animate-spin' : ''} />
+                                                Mejorar con IA
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {/* AI Suggestion Button */}
+                                    <button
+                                        type="button"
+                                        onClick={handleAISuggest}
+                                        disabled={aiLoading}
+                                        className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-bold uppercase tracking-wider hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+                                    >
+                                        <Sparkles size={18} className={aiLoading ? 'animate-pulse' : ''} />
+                                        {aiLoading ? 'Generando...' : '✨ Generar Sugerencia con IA'}
+                                    </button>
                                 </div>
                             )}
 
@@ -267,6 +351,17 @@ export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSa
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* AI Price Suggestion Button */}
+                                    <button
+                                        type="button"
+                                        onClick={handleAISuggestPrice}
+                                        disabled={aiLoading || originalPrice === 0}
+                                        className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-bold uppercase tracking-wider hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+                                    >
+                                        <Sparkles size={18} className={aiLoading ? 'animate-pulse' : ''} />
+                                        {aiLoading ? 'Calculando...' : '💰 Sugerir Precio Óptimo con IA'}
+                                    </button>
 
                                     <div className="p-4 bg-yellow-50 border border-yellow-200">
                                         <p className="text-xs font-bold text-yellow-800">💡 Recomendación</p>
@@ -431,14 +526,26 @@ export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSa
 
                 {/* Footer */}
                 <div className="p-8 border-t border-gray-200 flex items-center justify-between bg-gray-50">
-                    <button
-                        onClick={() => step > 1 && setStep(step - 1)}
-                        disabled={step === 1}
-                        className="flex items-center gap-2 px-6 py-3 border border-gray-200 text-sm font-bold uppercase tracking-widest hover:border-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        <ArrowLeft size={16} />
-                        Anterior
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {/* Cancel Button - Always visible */}
+                        <button
+                            onClick={onCancel}
+                            className="flex items-center gap-2 px-6 py-3 border-2 border-red-200 text-red-600 text-sm font-bold uppercase tracking-widest hover:bg-red-50 hover:border-red-400 transition-all"
+                        >
+                            <X size={16} />
+                            Cancelar
+                        </button>
+
+                        {/* Previous Button */}
+                        <button
+                            onClick={() => step > 1 && setStep(step - 1)}
+                            disabled={step === 1}
+                            className="flex items-center gap-2 px-6 py-3 border border-gray-200 text-sm font-bold uppercase tracking-widest hover:border-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <ArrowLeft size={16} />
+                            Anterior
+                        </button>
+                    </div>
 
                     <div className="flex items-center gap-4">
                         {step < 4 ? (
@@ -457,7 +564,7 @@ export const KitBuilder: React.FC<KitBuilderProps> = ({ products, vendorId, onSa
                                 className="flex items-center gap-2 px-8 py-4 bg-black text-white text-sm font-bold uppercase tracking-widest hover:bg-gray-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <Check size={16} />
-                                Crear Kit
+                                {initialKit ? 'Guardar Cambios' : 'Crear Kit'}
                             </button>
                         )}
                     </div>

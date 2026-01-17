@@ -45,10 +45,14 @@ import {
   Download,
   X,
   Check,
-  XCircle
+  XCircle,
+  Edit
 } from 'lucide-react';
 import { generatePDFReport } from '../lib/pdfGenerator';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { KitBuilder } from '../components/KitBuilder';
+import { Kit } from '../types';
+import { apiClient } from '../lib/apiClient';
 
 ChartJS.register(
   CategoryScale,
@@ -170,6 +174,56 @@ const AdminHome = ({ users, products, orders, navigate }: { users: AppUser[], pr
 
   return (
     <div className="space-y-12 animate-in fade-in duration-700">
+      {/* Report Actions */}
+      <div className="flex gap-4 mb-4">
+        <button
+          onClick={() => generatePDFReport({
+            title: 'Reporte de Ventas',
+            subtitle: 'Histórico de transacciones',
+            fileName: 'reporte-ventas.pdf',
+            type: 'sales',
+            data: orders.map(o => ({
+              date: new Date(o.createdAt).toLocaleDateString(),
+              id: o.id.slice(0, 8),
+              customer: o.userId.slice(0, 8),
+              total: o.totalAmount
+            })),
+            columns: [
+              { header: 'Fecha', dataKey: 'date' },
+              { header: 'ID', dataKey: 'id' },
+              { header: 'Cliente', dataKey: 'customer' },
+              { header: 'Total', dataKey: 'total' }
+            ]
+          })}
+          className="flex items-center gap-2 px-6 py-3 bg-black text-white text-xs font-bold uppercase rounded-xl hover:bg-gray-800 transition-colors shadow-lg"
+        >
+          <Download size={16} /> Descargar Reporte de Ventas (PDF)
+        </button>
+        <button
+          onClick={() => generatePDFReport({
+            title: 'Reporte de Inventario',
+            subtitle: 'Estado actual de productos',
+            fileName: 'reporte-inventario.pdf',
+            type: 'inventory',
+            data: products.map(p => ({
+              name: p.name,
+              sku: p.sku,
+              price: p.price,
+              stock: p.stock
+            })),
+            columns: [
+              { header: 'Producto', dataKey: 'name' },
+              { header: 'SKU', dataKey: 'sku' },
+              { header: 'Precio', dataKey: 'price' },
+              { header: 'Stock', dataKey: 'stock' }
+            ]
+          })}
+          className="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-100 text-black text-xs font-bold uppercase rounded-xl hover:bg-gray-50 transition-colors shadow-sm"
+        >
+          <FileText size={16} /> Descargar Inventario (PDF)
+        </button>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
         {[
@@ -522,6 +576,118 @@ export const AdminPage: React.FC<AdminProps> = ({ categories, users, products })
     }
   };
 
+  // Gestor de Kits
+  const KitsManagement = ({ products }: { products: Product[] }) => {
+    const [kits, setKits] = useState<Kit[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [showAdd, setShowAdd] = useState(false);
+    const [editingKit, setEditingKit] = useState<Kit | null>(null);
+    const { profile } = useAuth(); // Assuming useAuth is available/imported or accessible
+
+    const fetchKits = async () => {
+      try {
+        setLoading(true);
+        const data = await apiClient.getKits();
+        setKits(data);
+      } catch (error) {
+        console.error('Error fetching kits:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    useEffect(() => {
+      fetchKits();
+    }, []);
+
+    const handleSaveKit = async (kitData: Partial<Kit>) => {
+      try {
+        const kitToSave = {
+          ...kitData,
+          vendorId: profile?.id || 'admin', // Placeholder or current admin ID
+          status: kitData.status || 'ACTIVE'
+        };
+
+        if (editingKit) {
+          await apiClient.updateKit(editingKit.id, kitToSave);
+        } else {
+          await apiClient.createKit(kitToSave);
+        }
+
+        await fetchKits();
+        setShowAdd(false);
+        setEditingKit(null);
+      } catch (error) {
+        console.error('Error saving kit:', error);
+        alert('Error al guardar kit');
+      }
+    };
+
+    const handleDeleteKit = async (id: string) => {
+      if (!confirm('¿Estás seguro de eliminar este kit?')) return;
+      try {
+        await apiClient.deleteKit(id);
+        await fetchKits();
+      } catch (error) {
+        console.error('Error deleting kit:', error);
+        alert('Error al eliminar kit');
+      }
+    };
+
+    if (loading) return <div>Cargando kits...</div>;
+
+    return (
+      <div className="space-y-10 animate-in fade-in duration-700">
+        <div className="flex justify-between items-end">
+          <div>
+            <h2 className="text-4xl font-black uppercase tracking-tighter mb-2">Gestión de <span className="text-gray-300">Kits</span></h2>
+            <p className="text-gray-500 font-medium text-sm">Administra todos los kits de la plataforma</p>
+          </div>
+          <button
+            onClick={() => { setEditingKit(null); setShowAdd(true); }}
+            className="flex items-center gap-3 px-10 py-5 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-all"
+          >
+            <Plus size={16} /> Crear Nuevo Kit
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {kits.map(kit => (
+            <div key={kit.id} className="bg-white border border-gray-100 rounded-3xl p-6 hover:shadow-xl transition-all group">
+              <div className="aspect-video bg-gray-100 rounded-2xl overflow-hidden mb-6 relative">
+                <img src={kit.image || '/default-kit.png'} alt={kit.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div className="absolute top-4 right-4 flex gap-2">
+                  <button onClick={() => { setEditingKit(kit); setShowAdd(true); }} className="p-2 bg-white/80 backdrop-blur-sm rounded-full hover:bg-black hover:text-white transition-all">
+                    <Edit size={14} />
+                  </button>
+                  <button onClick={() => handleDeleteKit(kit.id)} className="p-2 bg-white/80 backdrop-blur-sm rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+              <h3 className="font-black uppercase tracking-tight text-lg mb-2">{kit.name}</h3>
+              <p className="text-gray-400 text-xs mb-4 line-clamp-2">{kit.description}</p>
+              <div className="flex justify-between items-center">
+                <span className="font-black text-xl">${kit.price.toFixed(2)}</span>
+                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${kit.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{kit.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {showAdd && (
+          <KitBuilder
+            products={products}
+            vendorId={profile?.id || 'admin'}
+            onSave={handleSaveKit}
+            onCancel={() => { setShowAdd(false); setEditingKit(null); }}
+            initialKit={editingKit || undefined}
+          />
+        )}
+      </div>
+    );
+  };
+
   const navigate = useNavigate();
 
   // Filtrado de proveedores
@@ -558,6 +724,7 @@ export const AdminPage: React.FC<AdminProps> = ({ categories, users, products })
       <Routes>
         <Route index element={<AdminHome users={users} products={products} orders={orders} navigate={navigate} />} />
         <Route path="users" element={<UserManagement users={users} />} />
+        <Route path="kits" element={<KitsManagement products={products} />} />
         <Route path="vendors" element={
           <div className="space-y-10 animate-in fade-in duration-700">
             <div className="flex justify-between items-end">

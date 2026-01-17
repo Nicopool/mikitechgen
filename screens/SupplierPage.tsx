@@ -3,7 +3,6 @@ import React, { useState } from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { DashboardLayout } from '../components/DashboardLayout';
 import { Product, Kit, Order, AppUser, SubOrder } from '../types';
-import { supabase } from '../lib/supabaseClient';
 import { useData } from '../contexts/DataContext';
 import {
   Bar,
@@ -41,6 +40,7 @@ import {
 import { KitBuilder } from '../components/KitBuilder';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { apiClient } from '../lib/apiClient';
+import { ImageUploader } from '../components/ImageUploader';
 
 ChartJS.register(
   CategoryScale,
@@ -207,6 +207,50 @@ const ProductModal = ({
     status: 'ACTIVE',
     vendorId: vendorId
   });
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // Import AI functions dynamically
+  const handleAISuggest = async () => {
+    if (aiLoading) return;
+    setAiLoading(true);
+    try {
+      const { generateProductSuggestion } = await import('../lib/aiKitSuggestions');
+      const suggestion = await generateProductSuggestion(
+        formData.name || '',
+        formData.category || 'Componentes'
+      );
+
+      setFormData(prev => ({
+        ...prev,
+        name: suggestion.name || prev.name,
+        sku: suggestion.sku || prev.sku,
+        description: suggestion.description || prev.description,
+        price: suggestion.suggestedPrice || prev.price
+      }));
+    } catch (error) {
+      console.error('AI suggestion error:', error);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleAIImproveDescription = async () => {
+    if (aiLoading || !formData.description) return;
+    setAiLoading(true);
+    try {
+      const { improveProductDescription } = await import('../lib/aiKitSuggestions');
+      const improved = await improveProductDescription(
+        formData.description,
+        formData.name || '',
+        formData.category || 'Componentes'
+      );
+      setFormData(prev => ({ ...prev, description: improved }));
+    } catch (error) {
+      console.error('AI improve error:', error);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,6 +272,17 @@ const ProductModal = ({
             <X size={24} />
           </button>
         </div>
+
+        {/* AI Suggestion Button */}
+        <button
+          type="button"
+          onClick={handleAISuggest}
+          disabled={aiLoading}
+          className="w-full flex items-center justify-center gap-3 px-6 py-4 mb-8 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-bold uppercase tracking-wider rounded-2xl hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg"
+        >
+          <Layers size={18} className={aiLoading ? 'animate-pulse' : ''} />
+          {aiLoading ? 'Generando...' : '✨ Generar Sugerencia con IA'}
+        </button>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-2 gap-6">
@@ -299,7 +354,18 @@ const ProductModal = ({
           </div>
 
           <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Descripción</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-1">Descripción</label>
+              <button
+                type="button"
+                onClick={handleAIImproveDescription}
+                disabled={aiLoading || !formData.description}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                <Layers size={14} className={aiLoading ? 'animate-spin' : ''} />
+                Mejorar con IA
+              </button>
+            </div>
             <textarea
               className="w-full p-5 border-2 border-gray-100 rounded-2xl font-bold focus:border-black outline-none transition-all resize-none h-32"
               value={formData.description}
@@ -357,7 +423,11 @@ const ProductCRUD = ({ user, products }: { user: AppUser, products: Product[] })
     onConfirm: () => { },
   });
 
-  const myProducts = products.filter(p => p.vendorId === user.id);
+  // For demo users (string IDs), show all products. For real users, filter by vendorId
+  const isDemoUser = typeof user.id === 'string' && user.id.startsWith('demo-');
+  const myProducts = isDemoUser
+    ? products // Show all products in demo mode
+    : products.filter(p => String(p.vendorId) === String(user.id));
 
   const handleCreateProduct = async (productData: Partial<Product>) => {
     try {
@@ -532,7 +602,11 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
     onConfirm: () => { },
   });
 
-  const myKits = kits.filter(k => k.vendorId === user.id);
+  // For demo users (string IDs), show all kits. For real users, filter by vendorId
+  const isDemoUser = typeof user.id === 'string' && user.id.startsWith('demo-');
+  const myKits = isDemoUser
+    ? kits
+    : kits.filter(k => String(k.vendorId) === String(user.id));
 
   const handleDeleteKit = async (id: string) => {
     try {
@@ -580,18 +654,35 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
     });
   };
 
-  const handleCreateKit = async (kitData: Partial<Kit>) => {
-    const kitToSave = {
-      ...kitData,
-      vendor_id: user.id,
-    };
+  const [editingKit, setEditingKit] = useState<Kit | null>(null);
 
-    const { error } = await supabase.from('kits').insert([kitToSave]);
-    if (error) {
-      alert('Error al crear kit: ' + error.message);
-    } else {
+  const handleSaveKit = async (kitData: Partial<Kit>) => {
+    try {
+      const kitToSave = {
+        name: kitData.name,
+        description: kitData.description,
+        products: kitData.products,
+        price: kitData.price,
+        originalPrice: kitData.originalPrice,
+        image: kitData.image,
+        status: kitData.status || 'ACTIVE',
+        vendorId: user.id
+      };
+
+      if (editingKit) {
+        await apiClient.updateKit(editingKit.id, kitToSave);
+        alert('Kit actualizado exitosamente');
+      } else {
+        await apiClient.createKit(kitToSave);
+        alert('Kit creado exitosamente');
+      }
+
+      await refreshData();
       setShowAdd(false);
-      refreshData();
+      setEditingKit(null);
+    } catch (error) {
+      console.error('Error saving kit:', error);
+      alert('Error al guardar kit: ' + (error as Error).message);
     }
   };
 
@@ -603,7 +694,7 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
           <p className="text-gray-500 font-medium text-sm">Crea y administra tus kits de productos</p>
         </div>
         <button
-          onClick={() => setShowAdd(true)}
+          onClick={() => { setEditingKit(null); setShowAdd(true); }}
           className="flex items-center gap-3 px-10 py-5 bg-black text-white text-xs font-bold uppercase tracking-widest hover:bg-gray-800 transition-all"
         >
           <Plus size={16} /> Crear Nuevo Kit
@@ -615,8 +706,9 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
         <KitBuilder
           products={myProducts}
           vendorId={user.id}
-          onSave={handleCreateKit}
-          onCancel={() => setShowAdd(false)}
+          onSave={handleSaveKit}
+          onCancel={() => { setShowAdd(false); setEditingKit(null); }}
+          initialKit={editingKit || undefined}
         />
       )}
 
@@ -633,13 +725,28 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
       {/* Existing Kits Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {myKits.map(k => (
-          <div key={k.id} className="p-8 border-2 border-gray-100 bg-white group hover:border-black transition-all">
-            <div className="flex justify-between items-start mb-6">
-              <div className="w-16 h-16 bg-gray-50 overflow-hidden border">
-                <img src={k.image} className="w-full h-full object-cover" />
-              </div>
+          <div key={k.id} className="p-8 border-2 border-gray-100 bg-white group hover:border-black transition-all rounded-[32px] relative">
+
+            <div className="mb-6">
+              <ImageUploader
+                currentImage={k.image}
+                itemName={k.name}
+                onImageUpdate={async (url) => {
+                  await apiClient.updateKitImage(k.id, url);
+                  refreshData();
+                }}
+              />
+            </div>
+
+            <div className="flex justify-between items-start mb-2">
+              <h3 className="text-lg font-black uppercase tracking-tight truncate flex-1">{k.name}</h3>
               <div className="flex gap-2">
-                <button className="p-2 hover:bg-gray-100 transition-colors"><Edit size={14} /></button>
+                <button
+                  onClick={() => { setEditingKit(k); setShowAdd(true); }}
+                  className="p-2 hover:bg-gray-100 transition-colors rounded-lg"
+                >
+                  <Edit size={14} />
+                </button>
                 <button
                   onClick={() => setConfirmModal({
                     isOpen: true,
@@ -649,13 +756,12 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
                     type: 'danger',
                     onConfirm: () => handleDeleteKit(k.id)
                   })}
-                  className="p-2 hover:bg-red-50 hover:text-red-500 transition-colors"
+                  className="p-2 hover:bg-red-50 hover:text-red-500 transition-colors rounded-lg"
                 >
                   <Trash2 size={14} />
                 </button>
               </div>
             </div>
-            <h3 className="text-lg font-black uppercase tracking-tight mb-2 truncate">{k.name}</h3>
             <div className="flex items-center gap-3 mb-6">
               <span className="px-3 py-1 bg-gray-50 text-[8px] font-bold uppercase">{k.products.length} Productos</span>
               <span className="px-3 py-1 bg-green-50 text-green-600 text-[8px] font-bold uppercase">Activo</span>
@@ -681,7 +787,7 @@ const KitCRUD = ({ user, products }: { user: AppUser, products: Product[] }) => 
 };
 
 export const SupplierPage: React.FC<SupplierProps> = ({ user, products }) => {
-  const { orders } = useData();
+  const { orders, refreshData } = useData();
 
   return (
     <DashboardLayout role="VENDOR">

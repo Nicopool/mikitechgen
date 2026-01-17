@@ -1,21 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Product, Kit, Category } from '../types';
 import { useCart } from '../contexts/CartContext';
 import { ShoppingBag, X, Plus, Minus, Check, Search, Filter, ArrowRight } from 'lucide-react';
 import { MainLayout } from '../components/MainLayout';
+import { apiClient } from '../lib/apiClient';
 
-interface ShopProps {
-  products: Product[];
-  kits: Kit[];
-  categories: Category[];
-}
-
-export const Shop: React.FC<ShopProps> = ({ products, kits, categories }) => {
+export const Shop: React.FC = () => {
   const { addToCart, items, total, removeFromCart, updateQuantity, itemCount } = useCart();
   const [filter, setFilter] = useState('ALL');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [showCart, setShowCart] = useState(false);
+
+  // State for API data
+  const [products, setProducts] = useState<Product[]>([]);
+  const [kits, setKits] = useState<Kit[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch data from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [productsData, kitsData, categoriesData] = await Promise.all([
+          apiClient.getProducts(),
+          apiClient.getKits(),
+          apiClient.getCategories()
+        ]);
+        setProducts(productsData);
+        setKits(kitsData);
+        setCategories(categoriesData);
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const toggleCategory = (catId: string) => {
     setSelectedCategories(prev =>
@@ -27,9 +50,26 @@ export const Shop: React.FC<ShopProps> = ({ products, kits, categories }) => {
     ...(filter === 'ALL' || filter === 'PRODUCT' ? products.map(p => ({ ...p, type: 'PRODUCT' as const })) : []),
     ...(filter === 'ALL' || filter === 'KIT' ? kits.map(k => ({ ...k, type: 'KIT' as const })) : [])
   ].filter(item => {
-    const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(item.category);
+    // Determine category ID for the item
+    // For products, use categoryId. For kits, we might not have it yet so check logic.
+    // Assuming backend returns categoryId for products now.
+    const itemCatId = (item as any).categoryId;
+    const categoryMatch = selectedCategories.length === 0 || (itemCatId && selectedCategories.includes(itemCatId));
     return categoryMatch;
   });
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-black mx-auto mb-4"></div>
+            <p className="text-sm font-bold uppercase tracking-widest text-gray-400">Cargando productos...</p>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>
@@ -203,10 +243,10 @@ export const Shop: React.FC<ShopProps> = ({ products, kits, categories }) => {
                     key={item.id}
                     className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-black transition-all duration-300 hover:shadow-xl flex flex-col relative"
                   >
-                    {item.type === 'KIT' && (
+                    {item.type === 'KIT' && (item as any).originalPrice && Number((item as any).originalPrice) > Number(item.price) && (
                       <div className="absolute top-4 left-4 z-10">
                         <span className="px-3 py-1 bg-[#ff3b30] text-white text-[9px] font-bold uppercase rounded-full shadow-lg tracking-widest">
-                          Ahorra {Math.round(((item as any).originalPrice - item.price) / (item as any).originalPrice * 100)}%
+                          Ahorra {Math.round((Number((item as any).originalPrice) - Number(item.price)) / Number((item as any).originalPrice) * 100)}%
                         </span>
                       </div>
                     )}
@@ -228,17 +268,17 @@ export const Shop: React.FC<ShopProps> = ({ products, kits, categories }) => {
                     </div>
 
                     <div className="p-6 flex flex-col flex-1">
-                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2 border border-gray-200 inline-block px-2 py-1 rounded self-start">{item.category}</p>
+                      <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2 border border-gray-200 inline-block px-2 py-1 rounded self-start">{item.category || 'Producto'}</p>
                       <h3 className="text-lg font-black font-display uppercase tracking-tight mb-4 leading-tight min-h-[3rem]">
                         {item.name}
                       </h3>
 
                       <div className="mt-auto flex items-center justify-between pt-4 border-t border-gray-50">
                         <div>
-                          {item.type === 'KIT' && (
-                            <p className="text-[10px] text-gray-400 line-through font-bold">${(item as any).originalPrice.toFixed(0)}</p>
+                          {item.type === 'KIT' && (item as any).originalPrice && Number((item as any).originalPrice) > Number(item.price) && (
+                            <p className="text-[10px] text-gray-400 line-through font-bold">${Number((item as any).originalPrice).toFixed(0)}</p>
                           )}
-                          <span className="text-2xl font-black text-black">${item.price.toFixed(0)}</span>
+                          <span className="text-2xl font-black text-black">${Number(item.price || 0).toFixed(0)}</span>
                         </div>
                         <button
                           onClick={() => addToCart(item as any, item.type)}

@@ -186,15 +186,22 @@ app.get('/api/products', async (req, res) => {
         // Get categories for each product
         for (let product of rows) {
             const [cats] = await pool.query(`
-                SELECT c.name 
+                SELECT c.id, c.name 
                 FROM categories c
                 JOIN product_categories pc ON c.id = pc.category_id
                 WHERE pc.product_id = ?
                 LIMIT 1
             `, [product.id]);
 
-            product.category = cats.length > 0 ? cats[0].name : 'Sin categoría';
+            if (cats.length > 0) {
+                product.category = cats[0].name;
+                product.categoryId = cats[0].id.toString();
+            } else {
+                product.category = 'Sin categoría';
+                product.categoryId = null;
+            }
             product.id = product.id.toString();
+            product.vendorId = product.vendorId ? product.vendorId.toString() : null;
             product.status = product.status ? 'ACTIVE' : 'INACTIVE';
         }
 
@@ -211,8 +218,26 @@ app.post('/api/products', async (req, res) => {
         const { name, sku, price, stock, category, description, image, status, vendorId } = req.body;
 
         // Validation
-        if (!name || !sku || !vendorId) {
-            return res.status(400).json({ error: 'Name, SKU, and vendorId are required' });
+        if (!name || !sku) {
+            return res.status(400).json({ error: 'Name and SKU are required' });
+        }
+
+        // Resolve vendorId - handle demo IDs and string IDs
+        let resolvedProviderId = null;
+        if (vendorId) {
+            // Check if vendorId is numeric
+            const numericId = parseInt(vendorId);
+            if (!isNaN(numericId) && numericId > 0) {
+                resolvedProviderId = numericId;
+            } else if (typeof vendorId === 'string' && vendorId.startsWith('demo-')) {
+                // For demo IDs, find a real provider or use the first available
+                const [providers] = await pool.query(
+                    "SELECT id FROM users WHERE role = 'PROVIDER' LIMIT 1"
+                );
+                if (providers.length > 0) {
+                    resolvedProviderId = providers[0].id;
+                }
+            }
         }
 
         // Generate slug from name
@@ -224,7 +249,7 @@ app.post('/api/products', async (req, res) => {
         // Insert product
         const [result] = await pool.query(
             'INSERT INTO products (name, slug, sku, price, stock, description, image_url, active, provider_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [name, slug, sku, price || 0, stock || 0, description || '', image || '', active, vendorId]
+            [name, slug, sku, price || 0, stock || 0, description || '', image || '', active, resolvedProviderId]
         );
 
         const productId = result.insertId;
@@ -253,6 +278,8 @@ app.post('/api/products', async (req, res) => {
                 [productId, categoryId]
             );
         }
+
+        console.log(`✅ Product created: ${name} (ID: ${productId}, Provider: ${resolvedProviderId || 'none'})`);
 
         res.status(201).json({
             id: productId.toString(),
@@ -318,12 +345,15 @@ app.get('/api/kits', async (req, res) => {
                 k.slug,
                 k.description,
                 k.price,
+                c.id as categoryId,
+                c.name as categoryName,
                 k.image_url as image,
                 k.status,
                 k.provider_id as vendorId,
                 k.created_at,
                 k.updated_at
             FROM kits k
+            LEFT JOIN categories c ON k.category_id = c.id
             ORDER BY k.created_at DESC
         `);
 
@@ -337,6 +367,9 @@ app.get('/api/kits', async (req, res) => {
 
             kit.products = items;
             kit.id = kit.id.toString();
+            kit.vendorId = kit.vendorId ? kit.vendorId.toString() : null;
+            kit.categoryId = kit.categoryId ? kit.categoryId.toString() : null; // Ensure string for frontend
+            kit.category = kit.categoryName || 'General'; // Fallback category name
             kit.originalPrice = kit.price * 1.15; // Calculate 15% markup as original price
         }
 
@@ -363,10 +396,15 @@ app.post('/api/kits', async (req, res) => {
         // Convert status to string (default 'ACTIVE')
         const kitStatus = status || 'ACTIVE';
 
+        // Generate default image if not provided
+        // Use local default-kit.png (Nano Banana Pro style) as requested
+        const defaultImage = 'http://localhost:3000/default-kit.png';
+        const kitImage = image || defaultImage;
+
         // Insert kit
         const [result] = await pool.query(
             'INSERT INTO kits (name, slug, description, price, image_url, status, provider_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [name, slug, description || '', price || 0, image || '', kitStatus, vendorId]
+            [name, slug, description || '', price || 0, kitImage, kitStatus, vendorId]
         );
 
         const kitId = result.insertId;
@@ -385,6 +423,63 @@ app.post('/api/kits', async (req, res) => {
         });
     } catch (error) {
         console.error('Error creating kit:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update kit details (including items)
+app.put('/api/kits/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, description, products, price, originalPrice, image, status } = req.body;
+
+        if (!name || !products || products.length === 0) {
+            return res.status(400).json({ error: 'Name and products are required' });
+        }
+
+        const slug = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+        // Update kit basic info
+        await pool.query(
+            'UPDATE kits SET name = ?, slug = ?, description = ?, price = ?, status = ?, image_url = COALESCE(?, image_url) WHERE id = ?',
+            [name, slug, description || '', price || 0, status || 'ACTIVE', image, id]
+        );
+
+        // Update items: Delete all and re-insert
+        await pool.query('DELETE FROM kit_items WHERE kit_id = ?', [id]);
+
+        for (const product of products) {
+            await pool.query(
+                'INSERT INTO kit_items (kit_id, product_id, quantity) VALUES (?, ?, ?)',
+                [id, product.productId, product.quantity || 1]
+            );
+        }
+
+        res.json({ message: 'Kit updated successfully' });
+    } catch (error) {
+        console.error('Error updating kit:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Update kit image only
+app.put('/api/kits/:id/image', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { imageUrl } = req.body;
+
+        if (!imageUrl) {
+            return res.status(400).json({ error: 'Image URL is required' });
+        }
+
+        await pool.query(
+            'UPDATE kits SET image_url = ? WHERE id = ?',
+            [imageUrl, id]
+        );
+
+        res.json({ message: 'Kit image updated successfully' });
+    } catch (error) {
+        console.error('Error updating kit image:', error);
         res.status(500).json({ error: error.message });
     }
 });

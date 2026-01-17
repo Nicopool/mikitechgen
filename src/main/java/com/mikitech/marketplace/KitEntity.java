@@ -7,11 +7,11 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "products")
+@Table(name = "kits")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class ProductEntity {
+public class KitEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -22,14 +22,11 @@ public class ProductEntity {
     private String name;
     private String slug;
     private String description;
-    private String sku;
     private Double price;
-    private Integer stock;
+    private String status;
 
     @Column(name = "image_url")
     private String imageUrl;
-
-    private Boolean active;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

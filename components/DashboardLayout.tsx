@@ -65,6 +65,7 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role
         { label: 'Proveedores', icon: <Store size={20} />, path: '/admin/vendors' },
         { label: 'Catálogo', icon: <Package size={20} />, path: '/admin/catalog' },
         { label: 'Categorías', icon: <Layers size={20} />, path: '/admin/categories' },
+        { label: 'Kits', icon: <ClipboardList size={20} />, path: '/admin/kits' },
         { label: 'Pedidos', icon: <ClipboardList size={20} />, path: '/admin/orders' },
         { label: 'Reportes', icon: <BarChart3 size={20} />, path: '/admin/reports' },
         { label: 'Configuración', icon: <Settings size={20} />, path: '/admin/config' },
@@ -97,8 +98,8 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children, role
                                     key={item.path}
                                     to={item.path}
                                     className={`flex items-center gap-4 rounded-2xl px-5 py-4 text-[11px] font-black uppercase tracking-widest transition-all ${isActive
-                                            ? 'bg-black text-white shadow-xl shadow-black/10'
-                                            : 'text-gray-400 hover:bg-gray-100 hover:text-black'
+                                        ? 'bg-black text-white shadow-xl shadow-black/10'
+                                        : 'text-gray-400 hover:bg-gray-100 hover:text-black'
                                         }`}
                                 >
                                     {item.icon}

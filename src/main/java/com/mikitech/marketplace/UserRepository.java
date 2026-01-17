@@ -2,9 +2,8 @@ package com.mikitech.marketplace;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-import java.util.List;
 
 @Repository
-public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
-    List<ProductEntity> findByProviderId(Long providerId);
+public interface UserRepository extends JpaRepository<UserEntity, Long> {
+    UserEntity findByEmail(String email);
 }

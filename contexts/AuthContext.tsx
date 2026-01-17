@@ -25,7 +25,7 @@ const AuthContext = createContext<AuthContextType>({
 // Demo users for testing
 const DEMO_USERS: AppUser[] = [
     {
-        id: 'demo-admin-001',
+        id: '1',
         email: 'admin@mikitech.com',
         name: 'Admin Mikitech',
         role: 'ADMIN',
@@ -33,7 +33,7 @@ const DEMO_USERS: AppUser[] = [
         createdAt: new Date().toISOString()
     },
     {
-        id: 'demo-vendor-001',
+        id: '2',
         email: 'proveedor@mikitech.com',
         name: 'Proveedor Demo',
         role: 'VENDOR',
@@ -41,7 +41,7 @@ const DEMO_USERS: AppUser[] = [
         createdAt: new Date().toISOString()
     },
     {
-        id: 'demo-user-001',
+        id: '8',
         email: 'cliente@mikitech.com',
         name: 'Cliente Demo',
         role: 'USER',
@@ -97,6 +97,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             setUser(session?.user ?? null);
+            if (session?.access_token) {
+                localStorage.setItem('supabase_token', session.access_token);
+            } else {
+                localStorage.removeItem('supabase_token');
+            }
             if (session?.user) fetchProfile(session.user.id);
             else {
                 setProfile(null);
@@ -213,6 +218,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             localStorage.removeItem('demo_profile');
         } else {
             await supabase.auth.signOut();
+            localStorage.removeItem('supabase_token');
             setProfile(null);
         }
     };

@@ -28,6 +28,7 @@ export interface Product {
   price: number;
   stock: number;
   category: string;
+  categoryId?: string;
   image: string;
   status: 'ACTIVE' | 'INACTIVE';
   vendorId?: string;

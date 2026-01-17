@@ -5,6 +5,6 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface ProductRepository extends JpaRepository<ProductEntity, Long> {
-    List<ProductEntity> findByProviderId(Long providerId);
+public interface VendorOrderRepository extends JpaRepository<VendorOrderEntity, Long> {
+    List<VendorOrderEntity> findByProviderId(Long providerId);
 }

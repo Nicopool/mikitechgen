@@ -1,5 +1,5 @@
-// API Client for MySQL Backend
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// API Client - Uses same port as frontend (Vite proxy to Node.js backend)
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 class APIClient {
     private baseURL: string;
@@ -10,19 +10,26 @@ class APIClient {
 
     private async request(endpoint: string, options: RequestInit = {}) {
         const url = `${this.baseURL}${endpoint}`;
+        const token = localStorage.getItem('supabase_token');
 
         try {
             const response = await fetch(url, {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
                     ...options.headers,
                 },
             });
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'API request failed');
+                const text = await response.text();
+                try {
+                    const error = JSON.parse(text);
+                    throw new Error(error.error || error.message || 'API request failed');
+                } catch (e) {
+                    throw new Error(text || 'API request failed');
+                }
             }
 
             return await response.json();
@@ -37,42 +44,13 @@ class APIClient {
         return this.request('/api/health');
     }
 
-    // Users
-    async getUsers() {
-        return this.request('/api/users');
-    }
-
-    async getUser(id: string) {
-        return this.request(`/api/users/${id}`);
-    }
-
-    async createUser(user: any) {
-        return this.request('/api/users', {
-            method: 'POST',
-            body: JSON.stringify(user),
-        });
-    }
-
-    async updateUser(id: string, user: any) {
-        return this.request(`/api/users/${id}`, {
-            method: 'PUT',
-            body: JSON.stringify(user),
-        });
-    }
-
-    async deleteUser(id: string) {
-        return this.request(`/api/users/${id}`, {
-            method: 'DELETE',
-        });
-    }
-
     // Products
     async getProducts() {
         return this.request('/api/products');
     }
 
-    async getProductsByVendor(vendorId: string) {
-        return this.request(`/api/products/vendor/${vendorId}`);
+    async getProduct(id: string | number) {
+        return this.request(`/api/products/${id}`);
     }
 
     async createProduct(product: any) {
@@ -82,22 +60,35 @@ class APIClient {
         });
     }
 
-    async updateProduct(id: string, product: any) {
+    async updateProduct(id: string | number, product: any) {
         return this.request(`/api/products/${id}`, {
             method: 'PUT',
             body: JSON.stringify(product),
         });
     }
 
-    async deleteProduct(id: string) {
+    async deleteProduct(id: string | number) {
         return this.request(`/api/products/${id}`, {
             method: 'DELETE',
         });
     }
 
+    // Supplier / Vendor specific
+    async getVendorStats(vendorId: string | number) {
+        return this.request(`/api/supplier/${vendorId}/stats`);
+    }
+
+    async getVendorProducts(vendorId: string | number) {
+        return this.request(`/api/supplier/${vendorId}/products`);
+    }
+
     // Kits
     async getKits() {
         return this.request('/api/kits');
+    }
+
+    async getVendorKits(vendorId: string | number) {
+        return this.request(`/api/kits/vendor/${vendorId}`);
     }
 
     async createKit(kit: any) {
@@ -107,7 +98,21 @@ class APIClient {
         });
     }
 
-    async deleteKit(id: string) {
+    async updateKit(id: string, kitData: any) {
+        return this.request(`/api/kits/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(kitData),
+        });
+    }
+
+    async updateKitImage(kitId: string | number, imageUrl: string) {
+        return this.request(`/api/kits/${kitId}/image`, {
+            method: 'PUT',
+            body: JSON.stringify({ imageUrl }),
+        });
+    }
+
+    async deleteKit(id: string | number) {
         return this.request(`/api/kits/${id}`, {
             method: 'DELETE',
         });
@@ -118,7 +123,7 @@ class APIClient {
         return this.request('/api/orders');
     }
 
-    async getOrdersByUser(userId: string) {
+    async getOrdersByUser(userId: string | number) {
         return this.request(`/api/orders/user/${userId}`);
     }
 
@@ -129,7 +134,7 @@ class APIClient {
         });
     }
 
-    async updateOrderStatus(id: string, status: string) {
+    async updateOrderStatus(id: string | number, status: string) {
         return this.request(`/api/orders/${id}/status`, {
             method: 'PUT',
             body: JSON.stringify({ status }),
@@ -140,31 +145,17 @@ class APIClient {
     async getCategories() {
         return this.request('/api/categories');
     }
-
-    // Stats
-    async getDashboardStats() {
-        return this.request('/api/stats/dashboard');
-    }
-
-    // Auth
-    async login(email: string, password: string) {
-        return this.request('/api/auth/login', {
-            method: 'POST',
-            body: JSON.stringify({ email, password }),
-        });
-    }
 }
 
 export const apiClient = new APIClient(API_URL);
 
-// Check if backend is available
 export const checkBackendConnection = async (): Promise<boolean> => {
     try {
-        await apiClient.health();
-        console.log('✅ Connected to MySQL backend');
+        const h = await apiClient.health();
+        console.log('✅ Connected to MySQL kitech:', h.database);
         return true;
     } catch (error) {
-        console.warn('⚠️ MySQL backend not available, using demo mode');
+        console.warn('⚠️ kitech backend not available');
         return false;
     }
 };

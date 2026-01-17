@@ -131,16 +131,18 @@ export const HomePage: React.FC<HomePageProps> = ({ categories, products, kits }
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   {/* Badge */}
-                  <div className="absolute top-4 right-4 px-3 py-1 bg-[#ff3b30] text-white text-xs font-bold uppercase tracking-wider">
-                    -{Math.round(((kit.originalPrice - kit.price) / kit.originalPrice) * 100)}%
-                  </div>
+                  {kit.originalPrice && kit.price && Number(kit.originalPrice) > Number(kit.price) && (
+                    <div className="absolute top-4 right-4 px-3 py-1 bg-[#ff3b30] text-white text-xs font-bold uppercase tracking-wider">
+                      -{Math.round(((Number(kit.originalPrice) - Number(kit.price)) / Number(kit.originalPrice)) * 100)}%
+                    </div>
+                  )}
                 </div>
 
                 {/* Content */}
                 <div className="p-6">
                   <div className="mb-4">
                     <span className="text-xs text-gray-400 uppercase tracking-widest font-bold">
-                      {kit.category}
+                      {kit.category || 'Kit'}
                     </span>
                   </div>
                   <h3 className="text-xl font-black uppercase tracking-tight mb-3 leading-tight">
@@ -153,10 +155,12 @@ export const HomePage: React.FC<HomePageProps> = ({ categories, products, kits }
                   {/* Price */}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                     <div>
-                      <span className="text-2xl font-black">${kit.price.toFixed(0)}</span>
-                      <span className="text-sm text-gray-400 line-through ml-2">
-                        ${kit.originalPrice.toFixed(0)}
-                      </span>
+                      <span className="text-2xl font-black">${Number(kit.price || 0).toFixed(0)}</span>
+                      {kit.originalPrice && Number(kit.originalPrice) > Number(kit.price) && (
+                        <span className="text-sm text-gray-400 line-through ml-2">
+                          ${Number(kit.originalPrice).toFixed(0)}
+                        </span>
+                      )}
                     </div>
                     <ArrowRight className="text-gray-400 group-hover:text-black group-hover:translate-x-1 transition-all" size={20} />
                   </div>

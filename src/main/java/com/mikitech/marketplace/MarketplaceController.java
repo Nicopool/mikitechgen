@@ -29,4 +29,24 @@ public class MarketplaceController {
     public ProductEntity createProduct(@RequestBody ProductEntity product) {
         return productRepository.save(product);
     }
+
+    @PutMapping("/{id}")
+    public ProductEntity updateProduct(@PathVariable Long id, @RequestBody ProductEntity product) {
+        ProductEntity existing = productRepository.findById(id).orElseThrow();
+        existing.setName(product.getName());
+        existing.setSlug(product.getSlug());
+        existing.setDescription(product.getDescription());
+        existing.setSku(product.getSku());
+        existing.setPrice(product.getPrice());
+        existing.setStock(product.getStock());
+        existing.setImageUrl(product.getImageUrl());
+        existing.setActive(product.getActive());
+        existing.setProviderId(product.getProviderId());
+        return productRepository.save(existing);
+    }
+
+    @DeleteMapping("/{id}")
+    public void deleteProduct(@PathVariable Long id) {
+        productRepository.deleteById(id);
+    }
 }
